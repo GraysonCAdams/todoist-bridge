@@ -18,6 +18,7 @@ const SyncMappingSchema = z.object({
 // Google Tasks source configuration
 const GoogleSourceSchema = z.object({
   enabled: z.boolean().default(true),
+  poll_interval_minutes: z.number().min(1).max(60).default(5),
   credentials_path: z.string().default('./credentials/google-credentials.json'),
   token_path: z.string().default('./credentials/google-token.json'),
   lists: z.array(SyncMappingSchema).default([]),
@@ -35,6 +36,7 @@ const AlexaShoppingListSchema = z.object({
 // Alexa Reminders source configuration
 const AlexaSourceSchema = z.object({
   enabled: z.boolean().default(false),
+  poll_interval_minutes: z.number().min(2).max(60).default(5),
   cookie_path: z.string().default('./credentials/alexa-cookie.json'),
   amazon_page: z.string().default('amazon.com'),
   proxy_port: z.number().default(3001),

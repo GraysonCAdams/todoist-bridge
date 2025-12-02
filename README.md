@@ -6,10 +6,10 @@
 </p>
 
 <p align="center">
-  <a href="https://github.com/YOUR_USERNAME/todoist-bridge/actions/workflows/docker-publish.yml">
-    <img src="https://github.com/YOUR_USERNAME/todoist-bridge/actions/workflows/docker-publish.yml/badge.svg" alt="Build Status">
+  <a href="https://github.com/GraysonCAdams/todoist-bridge/actions/workflows/docker-publish.yml">
+    <img src="https://github.com/GraysonCAdams/todoist-bridge/actions/workflows/docker-publish.yml/badge.svg" alt="Build Status">
   </a>
-  <a href="https://github.com/YOUR_USERNAME/todoist-bridge/pkgs/container/todoist-bridge">
+  <a href="https://github.com/GraysonCAdams/todoist-bridge/pkgs/container/todoist-bridge">
     <img src="https://img.shields.io/badge/ghcr.io-available-blue" alt="Container Registry">
   </a>
   <a href="LICENSE">
@@ -89,7 +89,7 @@ Enable only what you need - each source is independently configurable.
 
 ```bash
 # Pull the image
-docker pull ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+docker pull ghcr.io/graysoncadams/todoist-bridge:latest
 
 # Create directories
 mkdir -p ./data ./credentials
@@ -104,7 +104,7 @@ docker run -d \
   -v $(pwd)/config.yaml:/app/config.yaml:ro \
   -v $(pwd)/credentials:/app/credentials \
   -v $(pwd)/data:/app/data \
-  ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+  ghcr.io/graysoncadams/todoist-bridge:latest
 ```
 
 ---
@@ -116,7 +116,7 @@ docker run -d \
 Docker provides the simplest deployment path with automatic updates and isolation.
 
 ```bash
-docker pull ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+docker pull ghcr.io/graysoncadams/todoist-bridge:latest
 ```
 
 See [Docker Compose](#docker-compose) for a complete example.
@@ -128,7 +128,7 @@ Create a `docker-compose.yml`:
 ```yaml
 services:
   todoist-bridge:
-    image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+    image: ghcr.io/graysoncadams/todoist-bridge:latest
     container_name: todoist-bridge
     restart: unless-stopped
     volumes:
@@ -155,7 +155,7 @@ docker compose logs -f
 
 ```bash
 # Clone the repository
-git clone https://github.com/YOUR_USERNAME/todoist-bridge.git
+git clone https://github.com/GraysonCAdams/todoist-bridge.git
 cd todoist-bridge
 
 # Install dependencies

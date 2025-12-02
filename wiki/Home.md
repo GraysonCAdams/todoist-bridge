@@ -70,7 +70,7 @@ docker run -d \
   -v ./config.yaml:/app/config.yaml:ro \
   -v ./credentials:/app/credentials \
   -v ./data:/app/data \
-  ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+  ghcr.io/graysoncadams/todoist-bridge:latest
 
 # Or native
 npm install && npm run build && npm start
@@ -105,4 +105,4 @@ Sources (Google Tasks, Alexa)
 
 ## Support
 
-For issues and feature requests, please use the [GitHub Issues](https://github.com/YOUR_USERNAME/todoist-bridge/issues) page.
+For issues and feature requests, please use the [GitHub Issues](https://github.com/GraysonCAdams/todoist-bridge/issues) page.

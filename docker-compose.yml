@@ -1,6 +1,6 @@
 services:
   todoist-bridge:
-    image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+    image: ghcr.io/graysoncadams/todoist-bridge:latest
     container_name: todoist-bridge
     restart: unless-stopped
 

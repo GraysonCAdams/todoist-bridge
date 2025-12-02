@@ -120,7 +120,7 @@ docker run -it --rm \
   -p 3001:3001 \
   -v $(pwd)/credentials:/app/credentials \
   -v $(pwd)/config.yaml:/app/config.yaml:ro \
-  ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+  ghcr.io/graysoncadams/todoist-bridge:latest
 ```
 
 Then open `http://localhost:3001` and complete authorization.

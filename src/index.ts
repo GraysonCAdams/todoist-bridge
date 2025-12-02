@@ -1,15 +1,12 @@
 import { loadConfig } from './config.js';
 import { createLogger } from './utils/logger.js';
 import { Storage } from './storage.js';
-import { GoogleAuth } from './auth/google.js';
 import { TodoistAuth } from './auth/todoist.js';
-import { GoogleTasksClient } from './clients/google-tasks.js';
 import { TodoistClient } from './clients/todoist.js';
-import { SyncEngine } from './sync/engine.js';
-import { AlexaAuth } from './auth/alexa.js';
-import { AlexaClient } from './clients/alexa.js';
-import { AlexaSyncEngine } from './sync/alexa-engine.js';
-import { AlexaShoppingSyncEngine } from './sync/alexa-shopping-engine.js';
+import { GoogleTasksSource } from './sources/google/index.js';
+import { AlexaRemindersSource, AlexaShoppingSource, AlexaAuth, AlexaClient } from './sources/alexa/index.js';
+import type { SourceEngine, SyncResult, SourceContext } from './core/types.js';
+import { mergeSyncResults } from './core/types.js';
 import { readFileSync } from 'fs';
 import { fileURLToPath } from 'url';
 import { dirname, join } from 'path';
@@ -57,13 +54,22 @@ export function getHealthStatus(): HealthStatus {
   };
 }
 
+/**
+ * Source with its polling configuration
+ */
+interface ManagedSource {
+  engine: SourceEngine;
+  pollIntervalMs: number;
+  lastSyncAt: number;
+  timeout: NodeJS.Timeout | null;
+}
+
 async function main() {
   // Load configuration
   const config = loadConfig();
   const logger = createLogger(config);
 
-  logger.info({ version: VERSION }, 'Task Sync starting...');
-  logger.info({ pollInterval: config.poll_interval_minutes }, 'Poll interval configured');
+  logger.info({ version: VERSION }, 'Todoist Bridge starting...');
 
   // Initialize storage
   const storage = new Storage(config.storage.database_path);
@@ -79,24 +85,38 @@ async function main() {
   logger.info('Todoist authentication successful');
   const todoistClient = new TodoistClient(todoistAuth.getClient(), logger);
 
-  // Initialize sync engines
-  let googleSyncEngine: SyncEngine | null = null;
-  let alexaSyncEngine: AlexaSyncEngine | null = null;
-  let alexaShoppingSyncEngine: AlexaShoppingSyncEngine | null = null;
+  // Create source context
+  const context: SourceContext = {
+    logger,
+    storage,
+    todoistClient,
+  };
 
-  // Initialize Google Tasks sync (if enabled and has mappings)
+  // Initialize sources with their polling intervals
+  const managedSources: ManagedSource[] = [];
+
+  // Initialize Google Tasks source
   if (config.sources.google.enabled && config.sources.google.lists.length > 0) {
-    logger.info('Initializing Google Tasks integration...');
-    const googleAuth = new GoogleAuth(config, logger);
-    const googleOAuthClient = await googleAuth.getAuthenticatedClient();
-    const googleClient = new GoogleTasksClient(googleOAuthClient, config, logger);
-    googleSyncEngine = new SyncEngine(config, logger, storage, googleClient, todoistClient);
-    logger.info({ listCount: config.sources.google.lists.length }, 'Google Tasks integration enabled');
+    const googleSource = await GoogleTasksSource.create(config.sources.google, context);
+    if (googleSource) {
+      const pollInterval = config.sources.google.poll_interval_minutes || 5;
+      managedSources.push({
+        engine: googleSource,
+        pollIntervalMs: pollInterval * 60 * 1000,
+        lastSyncAt: 0,
+        timeout: null,
+      });
+      logger.info({
+        source: 'Google Tasks',
+        pollInterval,
+        listCount: config.sources.google.lists.length
+      }, 'Source initialized');
+    }
   } else {
-    logger.info('Google Tasks integration disabled (no lists configured)');
+    logger.info('Google Tasks source disabled or no lists configured');
   }
 
-  // Initialize Alexa sync (if enabled and has reminders or shopping list configured)
+  // Initialize Alexa sources (share the same client to avoid multiple auth flows)
   const hasAlexaReminders = config.sources.alexa.lists.length > 0;
   const hasAlexaShopping = config.sources.alexa.sync_shopping_list.enabled &&
                            config.sources.alexa.sync_shopping_list.todoist_project_id;
@@ -105,30 +125,52 @@ async function main() {
     logger.info('Initializing Alexa integration...');
 
     try {
-      const alexaAuth = new AlexaAuth(config, logger);
+      // Create shared Alexa client
+      const alexaAuth = new AlexaAuth(config.sources.alexa, logger);
       const alexaRemote = await alexaAuth.getAuthenticatedClient();
       const alexaClient = new AlexaClient(alexaRemote, logger);
+      const alexaPollInterval = config.sources.alexa.poll_interval_minutes || 5;
 
-      // Initialize reminders sync if configured
+      // Initialize reminders source if configured
       if (hasAlexaReminders) {
-        alexaSyncEngine = new AlexaSyncEngine(config, logger, storage, alexaClient, todoistClient);
-        logger.info('Alexa reminders sync enabled');
+        const remindersSource = await AlexaRemindersSource.create(
+          config.sources.alexa,
+          context,
+          alexaClient
+        );
+        if (remindersSource) {
+          managedSources.push({
+            engine: remindersSource,
+            pollIntervalMs: alexaPollInterval * 60 * 1000,
+            lastSyncAt: 0,
+            timeout: null,
+          });
+          logger.info({
+            source: 'Alexa Reminders',
+            pollInterval: alexaPollInterval
+          }, 'Source initialized');
+        }
       }
 
-      // Initialize shopping list sync if configured
+      // Initialize shopping source if configured
       if (hasAlexaShopping) {
-        alexaShoppingSyncEngine = new AlexaShoppingSyncEngine(config, logger, storage, alexaClient, todoistClient);
-        logger.info('Alexa shopping list sync enabled');
-      }
-
-      logger.info('Alexa integration enabled - running initial sync...');
-
-      // Sync immediately after successful Alexa authentication
-      if (alexaSyncEngine) {
-        await alexaSyncEngine.sync();
-      }
-      if (alexaShoppingSyncEngine) {
-        await alexaShoppingSyncEngine.sync();
+        const shoppingSource = await AlexaShoppingSource.create(
+          config.sources.alexa,
+          context,
+          alexaClient
+        );
+        if (shoppingSource) {
+          managedSources.push({
+            engine: shoppingSource,
+            pollIntervalMs: alexaPollInterval * 60 * 1000,
+            lastSyncAt: 0,
+            timeout: null,
+          });
+          logger.info({
+            source: 'Alexa Shopping',
+            pollInterval: alexaPollInterval
+          }, 'Source initialized');
+        }
       }
     } catch (error) {
       if (config.sources.alexa.fail_silently) {
@@ -138,8 +180,15 @@ async function main() {
       }
     }
   } else {
-    logger.info('Alexa integration disabled (not enabled or no lists/shopping configured)');
+    logger.info('Alexa integration disabled or not configured');
   }
+
+  if (managedSources.length === 0) {
+    logger.error('No sources configured. Please enable at least one source in config.yaml');
+    process.exit(1);
+  }
+
+  logger.info({ sourceCount: managedSources.length }, 'All sources initialized');
 
   // Handle graceful shutdown
   let isShuttingDown = false;
@@ -153,6 +202,13 @@ async function main() {
 
     isShuttingDown = true;
     logger.info({ signal }, 'Graceful shutdown initiated...');
+
+    // Clear all source timeouts
+    for (const source of managedSources) {
+      if (source.timeout) {
+        clearTimeout(source.timeout);
+      }
+    }
 
     // Set a timeout for graceful shutdown
     shutdownTimeout = setTimeout(() => {
@@ -199,87 +255,105 @@ async function main() {
     errorCount++;
   });
 
-  // Run initial Google sync
-  if (googleSyncEngine) {
-    logger.info('Running initial Google Tasks sync...');
-    await googleSyncEngine.sync();
+  /**
+   * Sync a single source
+   */
+  const syncSource = async (managed: ManagedSource): Promise<SyncResult> => {
+    const { engine } = managed;
+
+    try {
+      logger.debug({ source: engine.sourceName }, 'Starting sync');
+      const result = await engine.sync();
+      managed.lastSyncAt = Date.now();
+
+      if (!result.success) {
+        logger.warn({ source: engine.sourceName, errors: result.errors }, 'Sync completed with errors');
+      } else {
+        logger.debug({
+          source: engine.sourceName,
+          created: result.created,
+          updated: result.updated,
+          deleted: result.deleted,
+        }, 'Sync completed');
+      }
+
+      return result;
+    } catch (error) {
+      logger.error({ err: error, source: engine.sourceName }, 'Sync failed');
+      return {
+        success: false,
+        created: 0,
+        updated: 0,
+        deleted: 0,
+        completed: 0,
+        deletedFromSource: 0,
+        tagsUpdated: 0,
+        errors: [`${engine.sourceName}: ${error}`],
+      };
+    }
+  };
+
+  /**
+   * Schedule next sync for a source
+   */
+  const scheduleSourceSync = (managed: ManagedSource) => {
+    if (isShuttingDown) return;
+
+    managed.timeout = setTimeout(async () => {
+      if (isShuttingDown) return;
+
+      const result = await syncSource(managed);
+
+      // Update global stats
+      syncCount++;
+      lastSyncAt = new Date().toISOString();
+      if (!result.success) {
+        errorCount++;
+        lastSyncSuccess = false;
+      } else {
+        lastSyncSuccess = true;
+      }
+
+      // Schedule next sync
+      scheduleSourceSync(managed);
+    }, managed.pollIntervalMs);
+  };
+
+  // Run initial sync for all sources
+  logger.info('Running initial sync for all sources...');
+  const initialResults: SyncResult[] = [];
+
+  for (const managed of managedSources) {
+    const result = await syncSource(managed);
+    initialResults.push(result);
   }
 
-  // Unified sync function - runs all enabled sources together
-  const syncAll = async () => {
-    if (isShuttingDown) return;
+  const mergedInitial = mergeSyncResults(initialResults);
+  syncCount++;
+  lastSyncAt = new Date().toISOString();
+  lastSyncSuccess = mergedInitial.success;
+  if (!mergedInitial.success) {
+    errorCount++;
+  }
 
-    const startTime = Date.now();
-    logger.info('Starting sync cycle...');
+  logger.info({
+    created: mergedInitial.created,
+    updated: mergedInitial.updated,
+    deleted: mergedInitial.deleted,
+    errors: mergedInitial.errors.length,
+  }, 'Initial sync complete');
 
-    let hasError = false;
+  // Start independent polling loops for each source
+  for (const managed of managedSources) {
+    const intervalMinutes = managed.pollIntervalMs / 60000;
+    logger.info({
+      source: managed.engine.sourceName,
+      intervalMinutes,
+    }, 'Starting polling loop');
+    scheduleSourceSync(managed);
+  }
 
-    // Run all syncs together (in parallel for efficiency)
-    const syncPromises: Promise<unknown>[] = [];
-
-    if (googleSyncEngine) {
-      syncPromises.push(
-        googleSyncEngine.sync().catch((error) => {
-          logger.error({ err: error }, 'Google Tasks sync error');
-          hasError = true;
-        })
-      );
-    }
-
-    if (alexaSyncEngine) {
-      syncPromises.push(
-        alexaSyncEngine.sync().catch((error) => {
-          logger.error({ err: error }, 'Alexa reminders sync error');
-          hasError = true;
-        })
-      );
-    }
-
-    if (alexaShoppingSyncEngine) {
-      syncPromises.push(
-        alexaShoppingSyncEngine.sync().catch((error) => {
-          logger.error({ err: error }, 'Alexa shopping list sync error');
-          hasError = true;
-        })
-      );
-    }
-
-    await Promise.all(syncPromises);
-
-    const duration = Date.now() - startTime;
-    syncCount++;
-    lastSyncAt = new Date().toISOString();
-    lastSyncSuccess = !hasError;
-
-    if (hasError) {
-      errorCount++;
-      logger.warn({ duration, syncCount }, 'Sync cycle completed with errors');
-    } else {
-      logger.info({ duration, syncCount }, 'Sync cycle complete');
-    }
-  };
-
-  // Start polling loop
-  const pollIntervalMs = config.poll_interval_minutes * 60 * 1000;
-  logger.info({ intervalMinutes: config.poll_interval_minutes }, 'Starting polling loop');
-
-  let pollTimeout: NodeJS.Timeout | null = null;
-
-  const poll = async () => {
-    if (isShuttingDown) return;
-
-    await syncAll();
-
-    // Schedule next poll
-    if (!isShuttingDown) {
-      pollTimeout = setTimeout(poll, pollIntervalMs);
-    }
-  };
-
-  // Schedule first poll
-  pollTimeout = setTimeout(poll, pollIntervalMs);
-
-  // Keep process alive and log health status periodically
+  // Log health status periodically
   const healthLogInterval = setInterval(() => {
     if (!isShuttingDown) {
       const health = getHealthStatus();
@@ -295,12 +369,9 @@ async function main() {
   // Cleanup interval on shutdown
   process.on('exit', () => {
     clearInterval(healthLogInterval);
-    if (pollTimeout) {
-      clearTimeout(pollTimeout);
-    }
   });
 
-  logger.info('Sync daemon running. Press Ctrl+C to stop.');
+  logger.info('Todoist Bridge running. Press Ctrl+C to stop.');
 }
 
 main().catch((error) => {

@@ -6,7 +6,7 @@ This guide covers deploying Todoist Bridge with Docker and Docker Compose.
 
 ```bash
 # Pull image
-docker pull ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+docker pull ghcr.io/graysoncadams/todoist-bridge:latest
 
 # Create directories
 mkdir -p ./data ./credentials
@@ -22,7 +22,7 @@ docker run -d \
   -v $(pwd)/config.yaml:/app/config.yaml:ro \
   -v $(pwd)/credentials:/app/credentials \
   -v $(pwd)/data:/app/data \
-  ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+  ghcr.io/graysoncadams/todoist-bridge:latest
 ```
 
 ## Docker Compose
@@ -34,7 +34,7 @@ Create `docker-compose.yml`:
 ```yaml
 services:
   todoist-bridge:
-    image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+    image: ghcr.io/graysoncadams/todoist-bridge:latest
     container_name: todoist-bridge
     restart: unless-stopped
     volumes:
@@ -51,7 +51,7 @@ services:
 ```yaml
 services:
   todoist-bridge:
-    image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+    image: ghcr.io/graysoncadams/todoist-bridge:latest
     container_name: todoist-bridge
     restart: unless-stopped
     ports:
@@ -71,7 +71,7 @@ services:
 ```yaml
 services:
   todoist-bridge:
-    image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+    image: ghcr.io/graysoncadams/todoist-bridge:latest
     container_name: todoist-bridge
     restart: unless-stopped
     volumes:
@@ -200,7 +200,7 @@ docker run -it --rm \
   -v $(pwd)/config.yaml:/app/config.yaml:ro \
   -v $(pwd)/credentials:/app/credentials \
   -v $(pwd)/data:/app/data \
-  ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+  ghcr.io/graysoncadams/todoist-bridge:latest
 ```
 
 Complete authorization in browser, then Ctrl+C and start normally.

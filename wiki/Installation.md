@@ -19,13 +19,13 @@ Docker provides isolation and easy updates.
 
 ```bash
 # Pull the latest image
-docker pull ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+docker pull ghcr.io/graysoncadams/todoist-bridge:latest
 
 # Create required directories
 mkdir -p ./data ./credentials
 
 # Copy and edit configuration
-wget -O config.yaml https://raw.githubusercontent.com/YOUR_USERNAME/todoist-bridge/main/config.example.yaml
+wget -O config.yaml https://raw.githubusercontent.com/GraysonCAdams/todoist-bridge/main/config.example.yaml
 # Edit config.yaml with your settings
 
 # Run
@@ -35,7 +35,7 @@ docker run -d \
   -v $(pwd)/config.yaml:/app/config.yaml:ro \
   -v $(pwd)/credentials:/app/credentials \
   -v $(pwd)/data:/app/data \
-  ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+  ghcr.io/graysoncadams/todoist-bridge:latest
 ```
 
 ### Docker Compose
@@ -46,7 +46,7 @@ See [Docker Deployment](Docker-Deployment) for a complete Docker Compose setup.
 
 ```bash
 # Clone repository
-git clone https://github.com/YOUR_USERNAME/todoist-bridge.git
+git clone https://github.com/GraysonCAdams/todoist-bridge.git
 cd todoist-bridge
 
 # Install dependencies
@@ -109,7 +109,7 @@ After installation, configure the sources you want to use. **You don't need both
 ### Docker
 
 ```bash
-docker pull ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+docker pull ghcr.io/graysoncadams/todoist-bridge:latest
 docker stop todoist-bridge
 docker rm todoist-bridge
 # Re-run docker run command

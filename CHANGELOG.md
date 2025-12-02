@@ -29,5 +29,5 @@ and this project adheres to [Semantic Versioning](https://semver.org/spec/v2.0.0
 ### Added
 - Initial public release
 
-[Unreleased]: https://github.com/YOUR_USERNAME/todoist-bridge/compare/v1.0.0...HEAD
-[1.0.0]: https://github.com/YOUR_USERNAME/todoist-bridge/releases/tag/v1.0.0
+[Unreleased]: https://github.com/GraysonCAdams/todoist-bridge/compare/v1.0.0...HEAD
+[1.0.0]: https://github.com/GraysonCAdams/todoist-bridge/releases/tag/v1.0.0

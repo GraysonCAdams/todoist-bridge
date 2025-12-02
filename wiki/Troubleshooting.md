@@ -315,7 +315,7 @@ docker start todoist-bridge
 
 1. Check logs with `LOG_LEVEL=debug`
 2. Review this troubleshooting guide
-3. Search [GitHub Issues](https://github.com/YOUR_USERNAME/todoist-bridge/issues)
+3. Search [GitHub Issues](https://github.com/GraysonCAdams/todoist-bridge/issues)
 4. Open a new issue with:
    - Error message
    - Relevant logs (redact tokens)

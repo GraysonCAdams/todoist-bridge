@@ -10,7 +10,7 @@
 
 services:
   todoist-bridge:
-    image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+    image: ghcr.io/graysoncadams/todoist-bridge:latest
     container_name: todoist-bridge
     restart: unless-stopped
     volumes:
@@ -27,7 +27,7 @@ services:
 
 # services:
 #   todoist-bridge:
-#     image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+#     image: ghcr.io/graysoncadams/todoist-bridge:latest
 #     container_name: todoist-bridge
 #     restart: "no"  # Don't restart during auth
 #     stdin_open: true
@@ -49,7 +49,7 @@ services:
 
 # services:
 #   todoist-bridge:
-#     image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+#     image: ghcr.io/graysoncadams/todoist-bridge:latest
 #     container_name: todoist-bridge
 #     restart: unless-stopped
 #     volumes:
@@ -90,7 +90,7 @@ services:
 #
 # services:
 #   todoist-bridge:
-#     image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+#     image: ghcr.io/graysoncadams/todoist-bridge:latest
 #     container_name: todoist-bridge
 #     restart: unless-stopped
 #     secrets:
@@ -110,7 +110,7 @@ services:
 
 # services:
 #   todoist-bridge:
-#     image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+#     image: ghcr.io/graysoncadams/todoist-bridge:latest
 #     container_name: todoist-bridge
 #     restart: unless-stopped
 #     labels:
@@ -139,7 +139,7 @@ services:
 
 # services:
 #   todoist-bridge:
-#     image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+#     image: ghcr.io/graysoncadams/todoist-bridge:latest
 #     container_name: todoist-bridge
 #     restart: unless-stopped
 #     networks:
@@ -161,7 +161,7 @@ services:
 
 # services:
 #   todoist-bridge-personal:
-#     image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+#     image: ghcr.io/graysoncadams/todoist-bridge:latest
 #     container_name: todoist-bridge-personal
 #     restart: unless-stopped
 #     volumes:
@@ -172,7 +172,7 @@ services:
 #       - TZ=America/New_York
 #
 #   todoist-bridge-work:
-#     image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+#     image: ghcr.io/graysoncadams/todoist-bridge:latest
 #     container_name: todoist-bridge-work
 #     restart: unless-stopped
 #     volumes:

@@ -129,7 +129,7 @@ docker run -it --rm \
   -p 3000:3000 \
   -v $(pwd)/credentials:/app/credentials \
   -v $(pwd)/config.yaml:/app/config.yaml:ro \
-  ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+  ghcr.io/graysoncadams/todoist-bridge:latest
 ```
 
 ## Token Refresh

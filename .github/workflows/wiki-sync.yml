@@ -1,0 +1,26 @@
+# Syncs the wiki/ folder to the GitHub Wiki repository
+# Triggers on pushes to main that modify wiki files, or manually via workflow_dispatch
+
+name: Sync Wiki
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - 'wiki/**'
+  workflow_dispatch:
+
+jobs:
+  sync-wiki:
+    runs-on: ubuntu-latest
+    permissions:
+      contents: write
+    steps:
+      - name: Checkout repository
+        uses: actions/checkout@v4
+
+      - name: Sync Wiki
+        uses: Andrew-Chen-Wang/github-wiki-action@v4
+        with:
+          path: wiki
+          token: ${{ secrets.GITHUB_TOKEN }}

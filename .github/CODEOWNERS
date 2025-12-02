@@ -1,0 +1,22 @@
+# Default owner for everything in the repository
+*                       @GraysonCAdams
+
+# GitHub configuration and workflows
+/.github/               @GraysonCAdams
+
+# Source code
+/src/                   @GraysonCAdams
+
+# Documentation
+/docs/                  @GraysonCAdams
+/wiki/                  @GraysonCAdams
+README.md               @GraysonCAdams
+
+# Docker configuration
+Dockerfile              @GraysonCAdams
+docker-compose*.yml     @GraysonCAdams
+
+# Configuration files
+*.json                  @GraysonCAdams
+*.yaml                  @GraysonCAdams
+*.yml                   @GraysonCAdams
