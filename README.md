@@ -136,13 +136,14 @@ services:
       - ./credentials:/app/credentials
       - ./data:/app/data
     ports:
-      - "3000:3000"  # Required for Google OAuth (first run only)
+      - "3000:3000"  # Google OAuth web form (first run only)
+      - "3001:3001"  # Alexa auth proxy (first run only, if using Alexa)
     environment:
       - LOG_LEVEL=info
       - TZ=America/New_York
 ```
 
-> **Note:** Port 3000 is only needed for the initial Google authorization. After the token is saved, you can remove the port mapping.
+> **Note:** Ports are only needed for initial authorization. After tokens/cookies are saved, you can remove the port mappings. For Alexa, also set `proxy_host` in config.yaml to your Docker host's IP.
 
 Run with:
 
@@ -275,6 +276,7 @@ sources:
     cookie_path: "./credentials/alexa-cookie.json"
     amazon_page: "amazon.com"
     proxy_port: 3001
+    proxy_host: "192.168.1.140"  # Your Docker host IP (for external access)
     fail_silently: true
     max_retries: 3
     lists:
@@ -360,9 +362,23 @@ On first run, you'll be prompted to authorize with Google:
 #### Alexa (if enabled)
 
 1. A proxy server starts on the configured port (default: 3001)
-2. Open `http://localhost:3001` in your browser
+2. Open `http://localhost:3001` in your browser (or your Docker host IP)
 3. Sign in with your Amazon account
 4. Cookies are saved for future runs
+
+> **Note for Docker:** When running in Docker, set `proxy_host` in your config to your Docker host's IP address (e.g., `192.168.1.140`) so the authentication redirects work correctly. Also expose the proxy port:
+> ```yaml
+> # config.yaml
+> sources:
+>   alexa:
+>     proxy_port: 3001
+>     proxy_host: "192.168.1.140"  # Your Docker host IP
+> ```
+> ```yaml
+> # docker-compose.yml
+> ports:
+>   - "3001:3001"
+> ```
 
 ### Finding IDs
 

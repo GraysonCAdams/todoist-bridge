@@ -52,6 +52,9 @@ sources:
     amazon_page: "amazon.com"
     # Port for authentication proxy server (used during initial login)
     proxy_port: 3001
+    # Host/IP for proxy redirects - set this to your Docker host's IP or hostname
+    # when accessing from outside the container (e.g., "192.168.1.140" or "myserver.local")
+    # proxy_host: "192.168.1.140"
     # If true, Alexa sync failures won't stop other sources from syncing
     fail_silently: true
     # Number of retry attempts for Alexa API calls

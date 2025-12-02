@@ -39,6 +39,7 @@ export const AlexaSourceConfigSchema = z.object({
   cookie_path: z.string().default('./credentials/alexa-cookie.json'),
   amazon_page: z.string().default('amazon.com'),
   proxy_port: z.number().default(3001),
+  proxy_host: z.string().optional(), // Host/IP for proxy redirects (e.g., "192.168.1.140")
   fail_silently: z.boolean().default(true),
   max_retries: z.number().min(1).max(10).default(3),
   lists: z.array(AlexaMappingSchema).default([]),

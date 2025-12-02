@@ -176,11 +176,13 @@ export class AlexaAuth {
 
     return new Promise((resolve, reject) => {
       // Use type assertion because the .d.ts types are incomplete
+      const proxyHost = this.config.proxy_host || 'localhost';
+      const proxyPort = this.config.proxy_port || 3001;
       const options = {
         cookie: savedCookie?.cookie,
         proxyOnly: !savedCookie?.cookie, // Only use proxy if no cookie exists
-        proxyOwnIp: '0.0.0.0', // Bind to all interfaces for Docker accessibility
-        proxyPort: this.config.proxy_port || 3001,
+        proxyOwnIp: proxyHost, // Used for generating redirect URLs
+        proxyPort: proxyPort,
         proxyListenBind: '0.0.0.0', // Bind to all interfaces for Docker accessibility
         amazonPage: this.config.amazon_page || 'amazon.com',
         amazonPageProxyLanguage: 'en_US',
@@ -199,7 +201,7 @@ export class AlexaAuth {
         console.log('Alexa Authorization Required');
         console.log('==========================================');
         console.log(`\nPlease visit this URL to authorize:\n`);
-        console.log(`http://localhost:${this.config.proxy_port || 3001}`);
+        console.log(`http://${proxyHost}:${proxyPort}`);
         console.log('\nLog in with your Amazon account (2FA required).');
         console.log('\n==========================================\n');
       }

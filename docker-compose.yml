@@ -21,8 +21,9 @@ services:
 
     # Ports only needed during initial OAuth setup
     # Uncomment for first-time authentication, then comment out
+    # For Alexa auth, also set proxy_host in config.yaml to your Docker host IP
     # ports:
-    #   - "3000:3000"  # Google OAuth callback
+    #   - "3000:3000"  # Google OAuth web form
     #   - "3001:3001"  # Alexa auth proxy
 
     # Resource limits
