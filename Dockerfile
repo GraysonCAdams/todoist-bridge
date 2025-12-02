@@ -38,7 +38,8 @@ WORKDIR /app
 
 # Install runtime dependencies for native modules
 # These are needed to compile better-sqlite3 for the target architecture
-RUN apk add --no-cache python3 make g++
+# su-exec is used by entrypoint to drop privileges after fixing permissions
+RUN apk add --no-cache python3 make g++ su-exec
 
 # Create non-root user for security
 RUN addgroup -g 1001 -S appgroup && \
@@ -53,21 +54,20 @@ RUN npm ci --omit=dev && \
     npm rebuild better-sqlite3 && \
     npm cache clean --force
 
-# Remove build tools after npm install to reduce image size
+# Remove build tools after npm install to reduce image size (keep su-exec)
 RUN apk del python3 make g++
 
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
 
-# Copy configuration example
+# Copy configuration example and entrypoint
 COPY config.example.yaml ./
+COPY docker-entrypoint.sh /usr/local/bin/
+RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
 # Create directories for data and credentials with proper ownership
 RUN mkdir -p /app/data /app/credentials && \
     chown -R appuser:appgroup /app
-
-# Switch to non-root user
-USER appuser
 
 # Environment defaults
 ENV NODE_ENV=production
@@ -82,5 +82,5 @@ HEALTHCHECK --interval=30s --timeout=10s --start-period=5s --retries=3 \
 # Data volume
 VOLUME ["/app/data", "/app/credentials"]
 
-# Run the application
-CMD ["node", "dist/index.js"]
+# Use entrypoint to fix permissions then drop to non-root user
+ENTRYPOINT ["docker-entrypoint.sh"]

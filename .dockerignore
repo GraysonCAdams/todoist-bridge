@@ -41,10 +41,11 @@ config.yml
 *.md
 wiki/
 
-# Docker
+# Docker (but include entrypoint script)
 Dockerfile
 docker-compose*.yml
 .dockerignore
+!docker-entrypoint.sh
 
 # GitHub
 .github/

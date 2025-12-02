@@ -135,10 +135,14 @@ services:
       - ./config.yaml:/app/config.yaml:ro
       - ./credentials:/app/credentials
       - ./data:/app/data
+    ports:
+      - "3000:3000"  # Required for Google OAuth (first run only)
     environment:
       - LOG_LEVEL=info
       - TZ=America/New_York
 ```
+
+> **Note:** Port 3000 is only needed for the initial Google authorization. After the token is saved, you can remove the port mapping.
 
 Run with:
 
@@ -316,13 +320,42 @@ logging:
 
 #### Google Tasks
 
+**Google Cloud Console Setup:**
+
+1. Go to [Google Cloud Console](https://console.cloud.google.com/)
+2. Create a new project or select an existing one
+3. Enable the **Google Tasks API**
+4. Go to **APIs & Services** > **Credentials**
+5. Create OAuth credentials > **Desktop app** (not "Web application")
+6. Download the credentials JSON
+7. Save as `./credentials/google-credentials.json`
+
+**Authorization Flow:**
+
 On first run, you'll be prompted to authorize with Google:
 
+**Interactive mode (CLI/Terminal):**
 1. A URL will be printed to the console
 2. Open the URL in your browser
 3. Sign in with your Google account
 4. Grant access to Google Tasks
-5. The token is saved for future runs
+5. Google displays an authorization code - copy it
+6. Paste the code in the terminal when prompted
+7. The token is saved for future runs
+
+**Docker mode (Non-interactive):**
+1. Check the container logs for the Google authorization URL
+2. Open the URL in your browser and authorize
+3. Google displays an authorization code - copy it
+4. Visit `http://localhost:3000/auth` (or your Docker host)
+5. Paste the authorization code in the web form
+6. The token is saved for future runs
+
+> **Note:** For Docker, ensure port 3000 is exposed for the initial authorization:
+> ```yaml
+> ports:
+>   - "3000:3000"
+> ```
 
 #### Alexa (if enabled)
 
