@@ -206,6 +206,20 @@ export class AlexaAuth {
 
       this.alexa!.init(options, (err) => {
         if (err) {
+          // Check if this is the expected "please login" message when no cookie exists
+          const isLoginPrompt = err.message?.includes('Please open') ||
+                               err.message?.includes('login to Amazon');
+
+          if (isLoginPrompt && !savedCookie?.cookie) {
+            // This is expected - the proxy is running and waiting for login
+            // Don't reject, just log and wait for the cookie event
+            this.logger.info(
+              { proxyPort: this.config.proxy_port || 3001 },
+              'Alexa proxy server started, waiting for browser login...'
+            );
+            return; // Don't reject - wait for cookie event
+          }
+
           // Check if it's a cookie issue
           if (err.message?.includes('cookie') || err.message?.includes('auth')) {
             this.logger.warn({ err }, 'Alexa cookie may be expired, try re-authenticating');
@@ -221,9 +235,9 @@ export class AlexaAuth {
         resolve(this.alexa!);
       });
 
-      // Handle proxy events
+      // Handle proxy events - this fires when user completes browser login
       this.alexa!.on('cookie', (cookie: string, csrf: string, macDms: Record<string, unknown>) => {
-        this.logger.debug('Received new Alexa cookie');
+        this.logger.debug('Received new Alexa cookie from browser login');
         const cookieData: AlexaCookie = {
           cookie,
           csrf,
@@ -231,7 +245,20 @@ export class AlexaAuth {
           formerRegistrationData: (this.alexa as unknown as { cookieData?: { formerRegistrationData?: Record<string, unknown> } })?.cookieData?.formerRegistrationData,
         };
         this.saveCookieData(cookieData);
+
+        // If we were waiting for login (no saved cookie), resolve now
+        if (!savedCookie?.cookie) {
+          this.logger.info('Alexa authentication successful (via browser login)');
+          resolve(this.alexa!);
+        }
       });
+
+      // Add timeout for waiting for browser login (10 minutes)
+      if (!savedCookie?.cookie) {
+        setTimeout(() => {
+          reject(new Error('Alexa authentication timeout (10 minutes). Please try again.'));
+        }, 600000);
+      }
     });
   }
 
