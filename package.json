@@ -19,7 +19,7 @@
   ],
   "license": "MIT",
   "dependencies": {
-    "@doist/todoist-api-typescript": "^3.0.3",
+    "@doist/todoist-api-typescript": "^6.2.0",
     "alexa-remote2": "^8.0.4",
     "better-sqlite3": "^11.5.0",
     "date-fns": "^4.1.0",
