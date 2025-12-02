@@ -179,9 +179,9 @@ export class AlexaAuth {
       const options = {
         cookie: savedCookie?.cookie,
         proxyOnly: !savedCookie?.cookie, // Only use proxy if no cookie exists
-        proxyOwnIp: 'localhost',
+        proxyOwnIp: '0.0.0.0', // Bind to all interfaces for Docker accessibility
         proxyPort: this.config.proxy_port || 3001,
-        proxyListenBind: '127.0.0.1',
+        proxyListenBind: '0.0.0.0', // Bind to all interfaces for Docker accessibility
         amazonPage: this.config.amazon_page || 'amazon.com',
         amazonPageProxyLanguage: 'en_US',
         acceptLanguage: 'en-US',
