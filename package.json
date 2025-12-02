@@ -24,7 +24,7 @@
     "better-sqlite3": "^11.5.0",
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.5",
-    "googleapis": "^144.0.0",
+    "googleapis": "^166.0.0",
     "p-retry": "^6.2.0",
     "pino": "^9.5.0",
     "pino-pretty": "^11.3.0",
