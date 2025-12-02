@@ -1,0 +1,50 @@
+services:
+  todoist-bridge:
+    image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+    container_name: todoist-bridge
+    restart: unless-stopped
+
+    # Mount configuration and persistent data
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./credentials:/app/credentials
+      - ./data:/app/data
+
+    # Environment variables (override config.yaml values)
+    environment:
+      - NODE_ENV=production
+      - TZ=America/New_York
+      - LOG_LEVEL=info
+      # Uncomment to override via environment:
+      # - TODOIST_API_TOKEN=your-token-here
+      # - POLL_INTERVAL_MINUTES=5
+
+    # Ports only needed during initial OAuth setup
+    # Uncomment for first-time authentication, then comment out
+    # ports:
+    #   - "3000:3000"  # Google OAuth callback
+    #   - "3001:3001"  # Alexa auth proxy
+
+    # Resource limits
+    deploy:
+      resources:
+        limits:
+          cpus: '0.5'
+          memory: 256M
+        reservations:
+          memory: 128M
+
+    # Health check
+    healthcheck:
+      test: ["CMD", "node", "-e", "console.log('healthy')"]
+      interval: 30s
+      timeout: 10s
+      retries: 3
+      start_period: 10s
+
+    # Logging configuration
+    logging:
+      driver: "json-file"
+      options:
+        max-size: "10m"
+        max-file: "3"

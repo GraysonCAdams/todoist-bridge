@@ -1,0 +1,43 @@
+{
+  "name": "todoist-bridge",
+  "version": "1.0.0",
+  "description": "Sync tasks from multiple sources (Google Tasks, Alexa) to Todoist",
+  "type": "module",
+  "main": "dist/index.js",
+  "scripts": {
+    "build": "tsc",
+    "start": "node dist/index.js",
+    "dev": "tsx src/index.ts"
+  },
+  "keywords": [
+    "todoist",
+    "google-tasks",
+    "alexa",
+    "sync",
+    "tasks",
+    "reminders"
+  ],
+  "license": "MIT",
+  "dependencies": {
+    "@doist/todoist-api-typescript": "^3.0.3",
+    "alexa-remote2": "^8.0.4",
+    "better-sqlite3": "^11.5.0",
+    "date-fns": "^4.1.0",
+    "dotenv": "^16.4.5",
+    "googleapis": "^144.0.0",
+    "p-retry": "^6.2.0",
+    "pino": "^9.5.0",
+    "pino-pretty": "^11.3.0",
+    "yaml": "^2.6.1",
+    "zod": "^3.23.8"
+  },
+  "devDependencies": {
+    "@types/better-sqlite3": "^7.6.11",
+    "@types/node": "^22.9.3",
+    "tsx": "^4.19.2",
+    "typescript": "^5.6.3"
+  },
+  "engines": {
+    "node": ">=20.0.0"
+  }
+}

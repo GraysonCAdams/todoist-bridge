@@ -1,0 +1,50 @@
+# Dependencies
+node_modules/
+
+# Build output (rebuilt in container)
+dist/
+
+# Environment files
+.env
+.env.local
+.env*.local
+
+# Credentials (mounted at runtime)
+credentials/
+
+# Database (mounted at runtime)
+data/
+
+# Logs
+logs/
+*.log
+
+# Git
+.git/
+.gitignore
+
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# OS files
+.DS_Store
+Thumbs.db
+
+# User config (mounted at runtime)
+config.yaml
+config.yml
+
+# Documentation
+*.md
+wiki/
+
+# Docker
+Dockerfile
+docker-compose*.yml
+.dockerignore
+
+# GitHub
+.github/

@@ -1,0 +1,183 @@
+# Todoist Bridge - Docker Compose Examples
+#
+# This file contains example configurations for different deployment scenarios.
+# Copy the relevant section to your docker-compose.yml and customize.
+
+# =============================================================================
+# BASIC SETUP
+# Minimal configuration for getting started
+# =============================================================================
+
+services:
+  todoist-bridge:
+    image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+    container_name: todoist-bridge
+    restart: unless-stopped
+    volumes:
+      - ./config.yaml:/app/config.yaml:ro
+      - ./credentials:/app/credentials
+      - ./data:/app/data
+    environment:
+      - TZ=America/New_York
+
+# =============================================================================
+# FIRST-TIME SETUP
+# Use this for initial OAuth authentication, then switch to basic setup
+# =============================================================================
+
+# services:
+#   todoist-bridge:
+#     image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+#     container_name: todoist-bridge
+#     restart: "no"  # Don't restart during auth
+#     stdin_open: true
+#     tty: true
+#     ports:
+#       - "3000:3000"  # Google OAuth callback
+#       - "3001:3001"  # Alexa auth proxy
+#     volumes:
+#       - ./config.yaml:/app/config.yaml:ro
+#       - ./credentials:/app/credentials
+#       - ./data:/app/data
+#     environment:
+#       - LOG_LEVEL=debug
+
+# =============================================================================
+# PRODUCTION SETUP
+# Full production configuration with resource limits and monitoring
+# =============================================================================
+
+# services:
+#   todoist-bridge:
+#     image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+#     container_name: todoist-bridge
+#     restart: unless-stopped
+#     volumes:
+#       - ./config.yaml:/app/config.yaml:ro
+#       - ./credentials:/app/credentials
+#       - ./data:/app/data
+#     environment:
+#       - NODE_ENV=production
+#       - TZ=America/New_York
+#       - LOG_LEVEL=info
+#     deploy:
+#       resources:
+#         limits:
+#           cpus: '0.5'
+#           memory: 256M
+#         reservations:
+#           memory: 128M
+#     healthcheck:
+#       test: ["CMD", "node", "-e", "console.log('healthy')"]
+#       interval: 30s
+#       timeout: 10s
+#       retries: 3
+#       start_period: 10s
+#     logging:
+#       driver: "json-file"
+#       options:
+#         max-size: "10m"
+#         max-file: "3"
+
+# =============================================================================
+# WITH SECRETS (Docker Swarm or Compose v3.1+)
+# Store sensitive data in Docker secrets
+# =============================================================================
+
+# secrets:
+#   todoist_token:
+#     file: ./secrets/todoist_token.txt
+#
+# services:
+#   todoist-bridge:
+#     image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+#     container_name: todoist-bridge
+#     restart: unless-stopped
+#     secrets:
+#       - todoist_token
+#     volumes:
+#       - ./config.yaml:/app/config.yaml:ro
+#       - ./credentials:/app/credentials
+#       - ./data:/app/data
+#     environment:
+#       - NODE_ENV=production
+#       - TZ=America/New_York
+
+# =============================================================================
+# WITH WATCHTOWER (Auto-updates)
+# Automatically update to latest image
+# =============================================================================
+
+# services:
+#   todoist-bridge:
+#     image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+#     container_name: todoist-bridge
+#     restart: unless-stopped
+#     labels:
+#       - "com.centurylinklabs.watchtower.enable=true"
+#     volumes:
+#       - ./config.yaml:/app/config.yaml:ro
+#       - ./credentials:/app/credentials
+#       - ./data:/app/data
+#     environment:
+#       - TZ=America/New_York
+#
+#   watchtower:
+#     image: containrrr/watchtower
+#     container_name: watchtower
+#     restart: unless-stopped
+#     volumes:
+#       - /var/run/docker.sock:/var/run/docker.sock
+#     environment:
+#       - WATCHTOWER_CLEANUP=true
+#       - WATCHTOWER_POLL_INTERVAL=86400  # Check daily
+#       - WATCHTOWER_LABEL_ENABLE=true
+
+# =============================================================================
+# WITH TRAEFIK (Reverse proxy, if you add a web UI later)
+# =============================================================================
+
+# services:
+#   todoist-bridge:
+#     image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+#     container_name: todoist-bridge
+#     restart: unless-stopped
+#     networks:
+#       - traefik
+#     volumes:
+#       - ./config.yaml:/app/config.yaml:ro
+#       - ./credentials:/app/credentials
+#       - ./data:/app/data
+#     environment:
+#       - TZ=America/New_York
+#
+# networks:
+#   traefik:
+#     external: true
+
+# =============================================================================
+# MULTI-INSTANCE (Multiple accounts/configurations)
+# =============================================================================
+
+# services:
+#   todoist-bridge-personal:
+#     image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+#     container_name: todoist-bridge-personal
+#     restart: unless-stopped
+#     volumes:
+#       - ./personal/config.yaml:/app/config.yaml:ro
+#       - ./personal/credentials:/app/credentials
+#       - ./personal/data:/app/data
+#     environment:
+#       - TZ=America/New_York
+#
+#   todoist-bridge-work:
+#     image: ghcr.io/YOUR_USERNAME/todoist-bridge:latest
+#     container_name: todoist-bridge-work
+#     restart: unless-stopped
+#     volumes:
+#       - ./work/config.yaml:/app/config.yaml:ro
+#       - ./work/credentials:/app/credentials
+#       - ./work/data:/app/data
+#     environment:
+#       - TZ=America/New_York

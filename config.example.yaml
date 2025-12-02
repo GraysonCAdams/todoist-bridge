@@ -1,0 +1,96 @@
+# Todoist Bridge Configuration
+# Sync tasks from multiple sources to Todoist
+
+# Todoist configuration (required)
+todoist:
+  # API token (get from Todoist Settings > Integrations > Developer)
+  # Can also be set via TODOIST_API_TOKEN environment variable
+  api_token: ""
+
+# Sources to sync from
+# Each source can have its own polling interval
+sources:
+  # Google Tasks source
+  google:
+    enabled: true
+
+    # Polling interval in minutes for this source (1-60)
+    # Google Tasks API: 50,000 queries/day, minimum 1 minute recommended
+    poll_interval_minutes: 5
+
+    # Path to OAuth credentials JSON (download from Google Cloud Console)
+    credentials_path: "./credentials/google-credentials.json"
+    # Path to store OAuth tokens (auto-generated after first auth)
+    token_path: "./credentials/google-token.json"
+
+    # List mappings - each Google Task List to sync to a Todoist project
+    # Get Google list IDs by running with LOG_LEVEL=debug
+    # Get Todoist project IDs from Todoist settings or project URL
+    # Use "inbox" as todoist_project_id to sync to your Todoist Inbox
+    lists:
+      # - source_list_id: "abc123"           # Google Task List ID
+      #   todoist_project_id: "456789"       # Todoist Project ID (or "inbox")
+      #   include_completed: false           # Sync completed tasks
+      #   delete_after_sync: false           # Delete from Google after syncing
+      #   tags:                              # Custom tags/labels to apply in Todoist
+      #     - "google-tasks"
+      #     - "work"
+
+  # Alexa source (optional)
+  # Uses unofficial Amazon API - may break if Amazon changes their API
+  alexa:
+    enabled: false
+
+    # Polling interval in minutes for this source (2-60)
+    # Alexa uses unofficial API, minimum 2 minutes recommended
+    poll_interval_minutes: 5
+
+    # Path to store Amazon authentication cookies
+    cookie_path: "./credentials/alexa-cookie.json"
+    # Amazon domain for your region
+    # Options: amazon.com, amazon.co.uk, amazon.de, amazon.fr, amazon.it, amazon.es, amazon.co.jp, etc.
+    amazon_page: "amazon.com"
+    # Port for authentication proxy server (used during initial login)
+    proxy_port: 3001
+    # If true, Alexa sync failures won't stop other sources from syncing
+    fail_silently: true
+    # Number of retry attempts for Alexa API calls
+    max_retries: 3
+
+    # Reminder mappings - Alexa reminders (all reminders go to one project)
+    # Use "all" as source_list_id for Alexa
+    # Use "inbox" as todoist_project_id to sync to your Todoist Inbox
+    lists:
+      # - source_list_id: "all"              # Use "all" for Alexa (only one list)
+      #   todoist_project_id: "789012"       # Todoist Project ID (or "inbox")
+      #   include_completed: false           # Sync completed/expired reminders
+      #   delete_after_sync: false           # Delete from Alexa after syncing
+      #   tags:                              # Custom tags/labels to apply in Todoist
+      #     - "alexa"
+      #     - "reminders"
+
+    # Alexa Shopping List sync (optional)
+    # Syncs items from your Alexa Shopping List to a Todoist project
+    sync_shopping_list:
+      enabled: false
+      # todoist_project_id: "123456"        # Todoist Project ID (or "inbox")
+      # include_completed: false            # Include checked-off items
+      # delete_after_sync: false            # Delete from Alexa after syncing to Todoist
+      # tags:                               # Custom tags/labels to apply in Todoist
+      #   - "shopping"
+      #   - "alexa"
+
+# Global sync settings
+sync:
+  # Only import completed tasks on first run (retroactive import)
+  sync_completed_once: true
+
+# Storage configuration
+storage:
+  # SQLite database path
+  database_path: "./data/sync.db"
+
+# Logging configuration
+logging:
+  # Log level: trace, debug, info, warn, error
+  level: "info"
