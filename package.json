@@ -21,7 +21,7 @@
   "dependencies": {
     "@doist/todoist-api-typescript": "^3.0.3",
     "alexa-remote2": "^8.0.4",
-    "better-sqlite3": "^11.5.0",
+    "better-sqlite3": "^12.5.0",
     "date-fns": "^4.1.0",
     "dotenv": "^16.4.5",
     "googleapis": "^144.0.0",
