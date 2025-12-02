@@ -5,6 +5,7 @@
 import AlexaRemote from 'alexa-remote2';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
+import { createServer, Server, IncomingMessage, ServerResponse } from 'http';
 import type { AlexaSourceConfig } from './types.js';
 import type { Logger } from '../../utils/logger.js';
 
@@ -169,15 +170,104 @@ export class AlexaAuth {
     this.logger = logger;
   }
 
+  /**
+   * Detect the proxy host from the first browser request.
+   * This allows the auth flow to work regardless of how the user accesses the server.
+   */
+  private async detectProxyHost(port: number): Promise<string> {
+    return new Promise((resolve, reject) => {
+      const server: Server = createServer((req: IncomingMessage, res: ServerResponse) => {
+        // Extract hostname from the Host header (format: "hostname:port" or just "hostname")
+        const hostHeader = req.headers.host || '';
+        const hostname = hostHeader.split(':')[0] || 'localhost';
+
+        this.logger.info({ detectedHost: hostname, hostHeader }, 'Auto-detected proxy host from browser request');
+
+        // Send a response that tells user to wait and auto-refreshes
+        res.writeHead(200, { 'Content-Type': 'text/html' });
+        res.end(`
+          <!DOCTYPE html>
+          <html>
+          <head>
+            <title>Detecting host...</title>
+            <meta http-equiv="refresh" content="2">
+            <style>
+              body { font-family: Arial, sans-serif; display: flex; justify-content: center; align-items: center; height: 100vh; margin: 0; background: #f5f5f5; }
+              .card { background: white; padding: 40px; border-radius: 8px; box-shadow: 0 2px 10px rgba(0,0,0,0.1); text-align: center; }
+              h1 { color: #232f3e; margin-bottom: 10px; }
+              p { color: #666; }
+              .spinner { border: 4px solid #f3f3f3; border-top: 4px solid #ff9900; border-radius: 50%; width: 40px; height: 40px; animation: spin 1s linear infinite; margin: 20px auto; }
+              @keyframes spin { 0% { transform: rotate(0deg); } 100% { transform: rotate(360deg); } }
+            </style>
+          </head>
+          <body>
+            <div class="card">
+              <div class="spinner"></div>
+              <h1>Host Detected: ${hostname}</h1>
+              <p>Starting Amazon login proxy...</p>
+              <p style="font-size: 12px; color: #999;">This page will refresh automatically.</p>
+            </div>
+          </body>
+          </html>
+        `);
+
+        // Close the detection server after responding
+        server.close(() => {
+          this.logger.debug('Host detection server closed');
+          resolve(hostname);
+        });
+      });
+
+      server.on('error', (err: Error) => {
+        this.logger.error({ err }, 'Failed to start host detection server');
+        reject(new Error(`Failed to start host detection server: ${err.message}`));
+      });
+
+      server.listen(port, '0.0.0.0', () => {
+        this.logger.debug({ port }, 'Host detection server started');
+      });
+
+      // Timeout after 5 minutes
+      setTimeout(() => {
+        server.close();
+        reject(new Error('Host detection timeout (5 minutes). No browser connection received.'));
+      }, 300000);
+    });
+  }
+
   async getAuthenticatedClient(): Promise<AlexaRemote> {
     this.alexa = new AlexaRemote();
 
     const savedCookie = this.loadCookie();
+    const proxyPort = this.config.proxy_port || 3001;
+
+    // Determine proxy host - either from config, or auto-detect from browser
+    let proxyHost = this.config.proxy_host;
+
+    // If no saved cookie and no explicit proxy_host, auto-detect from browser request
+    if (!savedCookie?.cookie && !proxyHost) {
+      console.log('\n==========================================');
+      console.log('Alexa Authorization Required');
+      console.log('==========================================');
+      console.log(`\nPlease visit this URL to start authorization:\n`);
+      console.log(`http://<YOUR_SERVER_IP>:${proxyPort}`);
+      console.log(`\n(e.g., http://192.168.1.140:${proxyPort} or http://localhost:${proxyPort})`);
+      console.log('\nThe host will be automatically detected from your browser.');
+      console.log('\n==========================================\n');
+
+      try {
+        proxyHost = await this.detectProxyHost(proxyPort);
+        this.logger.info({ proxyHost }, 'Using auto-detected host for Alexa proxy');
+      } catch (error) {
+        this.logger.error({ err: error }, 'Host detection failed, falling back to localhost');
+        proxyHost = 'localhost';
+      }
+    }
+
+    // Default to localhost if still not set (e.g., when we have a saved cookie)
+    proxyHost = proxyHost || 'localhost';
 
     return new Promise((resolve, reject) => {
-      // Use type assertion because the .d.ts types are incomplete
-      const proxyHost = this.config.proxy_host || 'localhost';
-      const proxyPort = this.config.proxy_port || 3001;
       const options = {
         cookie: savedCookie?.cookie,
         proxyOnly: !savedCookie?.cookie, // Only use proxy if no cookie exists
@@ -195,13 +285,12 @@ export class AlexaAuth {
         proxyCloseWindowHTML: successPageHTML, // Custom success page matching Amazon's design
       } as Record<string, unknown>;
 
-      // If we need interactive auth, show instructions
+      // If we need interactive auth (after detection), show the actual URL
       if (!savedCookie?.cookie) {
         console.log('\n==========================================');
-        console.log('Alexa Authorization Required');
+        console.log('Amazon Login Ready');
         console.log('==========================================');
-        console.log(`\nPlease visit this URL to authorize:\n`);
-        console.log(`http://${proxyHost}:${proxyPort}`);
+        console.log(`\nProxy URL: http://${proxyHost}:${proxyPort}`);
         console.log('\nLog in with your Amazon account (2FA required).');
         console.log('\n==========================================\n');
       }
@@ -216,8 +305,8 @@ export class AlexaAuth {
             // This is expected - the proxy is running and waiting for login
             // Don't reject, just log and wait for the cookie event
             this.logger.info(
-              { proxyPort: this.config.proxy_port || 3001 },
-              'Alexa proxy server started, waiting for browser login...'
+              { proxyUrl: `http://${proxyHost}:${proxyPort}` },
+              `Alexa proxy server started, waiting for browser login at http://${proxyHost}:${proxyPort}`
             );
             return; // Don't reject - wait for cookie event
           }
