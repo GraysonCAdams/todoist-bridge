@@ -46,7 +46,16 @@ Todoist Bridge uses OAuth 2.0 to access your Google Tasks. You need to:
 10. Add your Google email address
 11. Click **Save and Continue**
 
-### 4. Create OAuth Credentials
+### 4. Publish the App (Important)
+
+By default, your app is in "Testing" mode, which means refresh tokens expire after 7 days. To avoid re-authenticating every week:
+
+1. Go to **APIs & Services** > **OAuth consent screen**
+2. Under "Publishing status", click **Publish App**
+3. Click **Confirm** in the dialog
+4. **Note**: You do not need to submit for verification for personal use. You will see a "Google hasn't verified this app" warning when logging in. Click **Advanced** > **Go to Todoist Bridge (unsafe)** to proceed.
+
+### 5. Create OAuth Credentials
 
 1. Go to **APIs & Services** > **Credentials**
 2. Click **Create Credentials** > **OAuth client ID**
@@ -56,7 +65,7 @@ Todoist Bridge uses OAuth 2.0 to access your Google Tasks. You need to:
 6. Click **Download JSON** on the confirmation dialog
 7. Save the file as `credentials/google-credentials.json`
 
-### 5. Verify Credentials File
+### 6. Verify Credentials File
 
 Your credentials file should look similar to:
 

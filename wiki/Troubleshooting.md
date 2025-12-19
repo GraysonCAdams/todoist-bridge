@@ -9,6 +9,7 @@ Common issues and their solutions.
 **Symptom**: Application exits immediately
 
 **Solutions**:
+
 1. Check configuration is valid YAML
 2. Verify required fields are set (todoist.api_token)
 3. Check file permissions on config and data directories
@@ -23,6 +24,7 @@ LOG_LEVEL=debug npm start
 **Symptom**: Error mentioning Zod or validation
 
 **Solutions**:
+
 1. Check YAML syntax (use a validator)
 2. Ensure all required fields are present
 3. Verify field types match expected types
@@ -33,6 +35,7 @@ LOG_LEVEL=debug npm start
 **Symptom**: SQLite errors
 
 **Solutions**:
+
 ```bash
 # Check database file permissions
 ls -la data/sync.db
@@ -53,12 +56,14 @@ See [Google Setup](Google-Setup) for details.
 ### "Todoist API token not configured"
 
 **Solution**: Set token in config.yaml:
+
 ```yaml
 todoist:
   api_token: "your-token-here"
 ```
 
 Or via environment:
+
 ```bash
 export TODOIST_API_TOKEN="your-token-here"
 ```
@@ -68,6 +73,7 @@ export TODOIST_API_TOKEN="your-token-here"
 **Symptom**: Google OAuth times out
 
 **Solutions**:
+
 1. Complete authorization within 5 minutes
 2. Ensure port 3000 is accessible
 3. Check firewall settings
@@ -76,6 +82,7 @@ export TODOIST_API_TOKEN="your-token-here"
 ### "Access blocked: This app's request is invalid"
 
 **Solutions**:
+
 1. Add your email to OAuth consent screen test users
 2. Ensure Tasks API is enabled
 3. Verify OAuth credentials are for Desktop app type
@@ -83,7 +90,16 @@ export TODOIST_API_TOKEN="your-token-here"
 
 ### "Token has been expired or revoked"
 
-**Solutions**:
+**Symptom**: Integration stops working after 7 days.
+
+**Cause**: Your Google Cloud project is in "Testing" mode, causing refresh tokens to expire after 7 days.
+
+**Solution**:
+
+1. Go to Google Cloud Console > APIs & Services > OAuth consent screen
+2. Click **Publish App** to set status to "Production"
+3. Delete the expired token and re-authorize:
+
 ```bash
 # Delete existing token
 rm credentials/google-token.json
@@ -95,6 +111,7 @@ npm start
 ### Tasks not syncing
 
 **Checklist**:
+
 1. Verify list ID is correct (use debug logging)
 2. Check list isn't empty
 3. Verify tasks have titles (empty titles are skipped)
@@ -106,6 +123,7 @@ npm start
 ### "Alexa authentication failed"
 
 **Solutions**:
+
 1. Delete cookie file and re-authenticate:
    ```bash
    rm credentials/alexa-cookie.json
@@ -117,6 +135,7 @@ npm start
 ### "Cookie expired"
 
 **Solution**: Re-authenticate
+
 ```bash
 rm credentials/alexa-cookie.json
 npm start
@@ -125,6 +144,7 @@ npm start
 ### "Unable to connect to Amazon"
 
 **Solutions**:
+
 1. Check internet connectivity
 2. Verify `amazon_page` is correct for your region
 3. Try a different proxy port
@@ -135,6 +155,7 @@ npm start
 This is expected if `fail_silently: true` is set. Alexa uses an unofficial API that may be unreliable.
 
 **Solutions**:
+
 1. Check Alexa cookie validity
 2. Increase `max_retries`
 3. Check Amazon account status
@@ -149,6 +170,7 @@ This is expected if `fail_silently: true` is set. Alexa uses an unofficial API t
 ### "Todoist API rate limit exceeded"
 
 **Solutions**:
+
 1. Increase `poll_interval_minutes`
 2. Reduce number of synced lists
 3. Wait for rate limit to reset (usually 1 minute)
@@ -156,6 +178,7 @@ This is expected if `fail_silently: true` is set. Alexa uses an unofficial API t
 ### Tasks created but no tags
 
 **Solutions**:
+
 1. Verify tags are valid label names in Todoist
 2. Labels must exist or be creatable
 3. Check tags array syntax in config
@@ -165,12 +188,14 @@ This is expected if `fail_silently: true` is set. Alexa uses an unofficial API t
 **Cause**: Database was reset while tasks exist in Todoist
 
 **Solutions**:
+
 1. Delete duplicates manually in Todoist
 2. Database tracks sync state - don't delete it
 
 ### Wrong project
 
 **Solution**: Verify `todoist_project_id` is correct:
+
 ```bash
 curl -s "https://api.todoist.com/rest/v2/projects" \
   -H "Authorization: Bearer YOUR_TOKEN" | jq
@@ -181,6 +206,7 @@ curl -s "https://api.todoist.com/rest/v2/projects" \
 ### Container won't start
 
 **Solutions**:
+
 ```bash
 # Check logs
 docker logs todoist-bridge
@@ -195,6 +221,7 @@ ls -la ./data ./credentials
 ### Permission denied errors
 
 **Solution**: Fix ownership (container runs as UID 1001):
+
 ```bash
 sudo chown -R 1001:1001 ./data ./credentials
 ```
@@ -202,6 +229,7 @@ sudo chown -R 1001:1001 ./data ./credentials
 ### OAuth redirect not working in Docker
 
 **Solutions**:
+
 1. Expose ports during auth:
    ```bash
    docker run -it -p 3000:3000 -p 3001:3001 ...
@@ -213,6 +241,7 @@ sudo chown -R 1001:1001 ./data ./credentials
 **Cause**: Multiple instances or unclean shutdown
 
 **Solutions**:
+
 ```bash
 # Stop container
 docker stop todoist-bridge
@@ -229,6 +258,7 @@ docker start todoist-bridge
 ### High CPU usage
 
 **Solutions**:
+
 1. Increase `poll_interval_minutes`
 2. Reduce number of lists
 3. Check for sync loops in logs
@@ -236,6 +266,7 @@ docker start todoist-bridge
 ### High memory usage
 
 **Solutions**:
+
 1. Restart the container periodically
 2. Check for memory leaks in logs
 3. Set memory limits in Docker
@@ -243,6 +274,7 @@ docker start todoist-bridge
 ### Slow sync
 
 **Solutions**:
+
 1. Reduce number of tasks per list
 2. Disable `include_completed`
 3. Check network connectivity
@@ -256,6 +288,7 @@ LOG_LEVEL=debug npm start
 ```
 
 Or in config:
+
 ```yaml
 logging:
   level: "debug"
@@ -263,13 +296,13 @@ logging:
 
 ### Log levels
 
-| Level | Description |
-|-------|-------------|
+| Level | Description                        |
+| ----- | ---------------------------------- |
 | trace | Very verbose, includes all details |
-| debug | Detailed operational information |
-| info | Normal operation events |
-| warn | Potential issues |
-| error | Errors that need attention |
+| debug | Detailed operational information   |
+| info  | Normal operation events            |
+| warn  | Potential issues                   |
+| error | Errors that need attention         |
 
 ### Log output
 
