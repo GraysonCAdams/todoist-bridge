@@ -326,8 +326,10 @@ export class GoogleAuth {
         if (isMyHAFlow) {
           console.log('\nUsing my.home-assistant.io OAuth redirect.');
           console.log('\nBefore proceeding, ensure you have:');
-          console.log('1. Set your server URL at https://my.home-assistant.io');
-          console.log(`2. Your server is accessible on port ${port}`);
+          console.log('1. Set your Todoist Bridge URL at https://my.home-assistant.io');
+          console.log(`   Example: http://<YOUR_LOCAL_IP>:${port}`);
+          console.log(`   IMPORTANT: Use port ${port} (Todoist Bridge), NOT 8123 (Home Assistant)!`);
+          console.log(`2. Port ${port} is accessible from your browser`);
           console.log('\nThen visit this URL to authorize:\n');
         } else {
           console.log('\nVisit this URL to authorize:\n');

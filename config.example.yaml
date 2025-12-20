@@ -27,15 +27,20 @@ sources:
     #
     # RECOMMENDED: Use my.home-assistant.io as OAuth redirect proxy
     # This works for any deployment, not just Home Assistant!
+    #
+    # Setup:
     # 1. Set use_homeassistant_redirect: true
-    # 2. Go to https://my.home-assistant.io and set your server URL
+    # 2. Go to https://my.home-assistant.io and set your Todoist Bridge URL
+    #    IMPORTANT: Use YOUR LOCAL IP + TODOIST BRIDGE PORT (not HA port!)
+    #    Example: http://192.168.1.140:3000 (NOT http://192.168.1.140:8123)
     # 3. In Google Cloud Console, set redirect URI to: https://my.home-assistant.io/redirect/oauth
+    # 4. Expose port 3000 in Docker if needed
     use_homeassistant_redirect: false
     #
     # Alternative: Direct OAuth (if not using my.home-assistant.io)
     # oauth_redirect_url: "https://myserver.example.com/oauth/google/callback"
     #
-    # Internal port for OAuth callback server (default: 3000)
+    # Internal port for OAuth callback server (must match URL in my.home-assistant.io)
     oauth_port: 3000
 
     # List mappings - each Google Task List to sync to a Todoist project

@@ -99,7 +99,9 @@ For production deployments (Docker, reverse proxy, Home Assistant, etc.), we use
 
 1. **Configure your server URL at my.home-assistant.io**:
    - Go to https://my.home-assistant.io
-   - Enter your Todoist Bridge server URL (e.g., `http://192.168.1.100:3000`)
+   - Enter your **Todoist Bridge** server URL with the correct port
+   - **IMPORTANT**: Use the Todoist Bridge port (default 3000), NOT Home Assistant's port (8123)
+   - Example: `http://192.168.1.140:3000` (your local IP + Todoist Bridge port)
    - This URL is stored in your browser's localStorage
 
 2. **Enable in config.yaml**:
@@ -108,21 +110,30 @@ For production deployments (Docker, reverse proxy, Home Assistant, etc.), we use
      google:
        enabled: true
        use_homeassistant_redirect: true
-       oauth_port: 3000
+       oauth_port: 3000  # Must match the port in my.home-assistant.io URL
    ```
 
 3. **Ensure Google Cloud Console has the correct redirect URI**:
    - `https://my.home-assistant.io/redirect/oauth`
 
+4. **Ensure port 3000 is accessible**:
+   - If running in Docker, expose port 3000: `ports: - "3000:3000"`
+   - If behind a firewall, allow incoming connections on port 3000
+
 ### First Authorization
 
 1. Start Todoist Bridge
 2. It will print an authorization URL to the console
-3. Visit the URL in your browser
+3. Visit the URL in your browser (use the same browser where you configured my.home-assistant.io)
 4. Sign in with your Google account
 5. Grant access to Google Tasks
 6. You'll be redirected through my.home-assistant.io to your server
 7. The token is saved automatically
+
+### Common Mistake
+
+**Wrong**: `http://192.168.1.140:8123` (This is Home Assistant's port!)
+**Right**: `http://192.168.1.140:3000` (This is Todoist Bridge's port)
 
 ## Alternative: Direct OAuth
 
