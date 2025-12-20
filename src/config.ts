@@ -22,6 +22,11 @@ const GoogleSourceSchema = z.object({
   credentials_path: z.string().default('./credentials/google-credentials.json'),
   token_path: z.string().default('./credentials/google-token.json'),
   lists: z.array(SyncMappingSchema).default([]),
+  // OAuth configuration for production deployments
+  use_homeassistant_redirect: z.boolean().default(false), // Use my.home-assistant.io as OAuth proxy
+  oauth_redirect_url: z.string().optional(), // Public URL (only if not using HA redirect)
+  oauth_port: z.number().default(3000), // Internal server port
+  oauth_callback_path: z.string().default('/oauth/google/callback'), // Callback path
 });
 
 // Alexa Shopping List sync configuration

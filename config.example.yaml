@@ -23,6 +23,21 @@ sources:
     # Path to store OAuth tokens (auto-generated after first auth)
     token_path: "./credentials/google-token.json"
 
+    # OAuth settings for production deployments (Docker, reverse proxy, Home Assistant, etc.)
+    #
+    # RECOMMENDED: Use my.home-assistant.io as OAuth redirect proxy
+    # This works for any deployment, not just Home Assistant!
+    # 1. Set use_homeassistant_redirect: true
+    # 2. Go to https://my.home-assistant.io and set your server URL
+    # 3. In Google Cloud Console, set redirect URI to: https://my.home-assistant.io/redirect/oauth
+    use_homeassistant_redirect: false
+    #
+    # Alternative: Direct OAuth (if not using my.home-assistant.io)
+    # oauth_redirect_url: "https://myserver.example.com/oauth/google/callback"
+    #
+    # Internal port for OAuth callback server (default: 3000)
+    oauth_port: 3000
+
     # List mappings - each Google Task List to sync to a Todoist project
     # Get Google list IDs by running with LOG_LEVEL=debug
     # Get Todoist project IDs from Todoist settings or project URL

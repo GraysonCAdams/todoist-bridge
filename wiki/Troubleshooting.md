@@ -79,6 +79,14 @@ export TODOIST_API_TOKEN="your-token-here"
 3. Check firewall settings
 4. Try a different browser
 
+### "The out-of-band (OOB) flow has been blocked"
+
+**Symptom**: Error message `redirect_uri=urn:ietf:wg:oauth:2.0:oob`
+
+**Cause**: Google has deprecated the manual copy-paste authentication flow.
+
+**Solution**: Update the application to the latest version which uses the loopback IP flow (http://localhost:3000).
+
 ### "Access blocked: This app's request is invalid"
 
 **Solutions**:

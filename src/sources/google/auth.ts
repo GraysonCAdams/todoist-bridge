@@ -2,17 +2,16 @@ import { google } from 'googleapis';
 import { OAuth2Client } from 'google-auth-library';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
-import { createInterface } from 'readline';
-import { createServer } from 'http';
+import { createServer, Server, IncomingMessage, ServerResponse } from 'node:http';
 import { URL } from 'url';
+import { randomBytes } from 'node:crypto';
 import type { Logger } from '../../utils/logger.js';
 import type { GoogleSourceConfig } from './types.js';
 
-// Out-of-Band redirect URI for Desktop/Installed apps
-const OOB_REDIRECT_URI = 'urn:ietf:wg:oauth:2.0:oob';
-
-// Port for the web-based auth code entry (used in Docker/non-interactive mode)
-const AUTH_WEB_PORT = 3000;
+// my.home-assistant.io OAuth redirect URL
+const MY_HA_REDIRECT_URL = 'https://my.home-assistant.io/redirect/oauth';
+// Path that my.home-assistant.io redirects to on user's server
+const MY_HA_CALLBACK_PATH = '/auth/external/callback';
 
 interface Credentials {
   installed?: {
@@ -37,10 +36,65 @@ interface Token {
 
 const SCOPES = ['https://www.googleapis.com/auth/tasks'];
 
+// Success page HTML
+const SUCCESS_HTML = `<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1.0">
+  <title>Authorization Successful</title>
+  <style>
+    * { margin: 0; padding: 0; box-sizing: border-box; }
+    body {
+      font-family: -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, sans-serif;
+      background: linear-gradient(135deg, #667eea 0%, #764ba2 100%);
+      min-height: 100vh;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+    }
+    .card {
+      background: white;
+      border-radius: 16px;
+      padding: 48px;
+      text-align: center;
+      box-shadow: 0 20px 60px rgba(0,0,0,0.3);
+      max-width: 400px;
+    }
+    .icon {
+      width: 80px;
+      height: 80px;
+      background: #10b981;
+      border-radius: 50%;
+      display: flex;
+      align-items: center;
+      justify-content: center;
+      margin: 0 auto 24px;
+    }
+    .icon svg { width: 40px; height: 40px; fill: white; }
+    h1 { color: #1f2937; font-size: 24px; margin-bottom: 12px; }
+    p { color: #6b7280; line-height: 1.6; }
+    .hint { margin-top: 24px; font-size: 14px; color: #9ca3af; }
+  </style>
+</head>
+<body>
+  <div class="card">
+    <div class="icon">
+      <svg viewBox="0 0 24 24"><path d="M9 16.17L4.83 12l-1.42 1.41L9 19 21 7l-1.41-1.41z"/></svg>
+    </div>
+    <h1>Authorization Successful!</h1>
+    <p>Your Google account has been connected successfully. You can close this window.</p>
+    <p class="hint">Task synchronization will begin automatically.</p>
+  </div>
+  <script>setTimeout(() => window.close(), 3000);</script>
+</body>
+</html>`;
+
 export class GoogleAuth {
   private config: GoogleSourceConfig;
   private logger: Logger;
   private oauth2Client: OAuth2Client | null = null;
+  private server: Server | null = null;
 
   constructor(config: GoogleSourceConfig, logger: Logger) {
     this.config = config;
@@ -60,18 +114,21 @@ export class GoogleAuth {
     const credentialsContent = readFileSync(credentialsPath, 'utf-8');
     const credentials: Credentials = JSON.parse(credentialsContent);
 
-    const { client_id, client_secret, redirect_uris } =
+    const { client_id, client_secret } =
       credentials.installed || credentials.web || {};
 
     if (!client_id || !client_secret) {
       throw new Error('Invalid credentials file: missing client_id or client_secret');
     }
 
-    // Use OOB redirect URI for Desktop/Installed app flow
+    // Determine redirect URI based on configuration
+    const useMyHA = this.config.use_homeassistant_redirect ?? false;
+    const redirectUri = useMyHA ? MY_HA_REDIRECT_URL : (this.config.oauth_redirect_url || 'http://localhost:3000/oauth/google/callback');
+
     this.oauth2Client = new google.auth.OAuth2(
       client_id,
       client_secret,
-      OOB_REDIRECT_URI
+      redirectUri
     );
 
     // Try to load existing token
@@ -93,7 +150,7 @@ export class GoogleAuth {
 
     // No token exists, need to authorize
     this.logger.info('No Google token found, starting authorization flow...');
-    return this.authorizeInteractive();
+    return this.authorizeInteractive(client_id, client_secret, useMyHA);
   }
 
   private isTokenExpired(token: Token): boolean {
@@ -111,44 +168,67 @@ export class GoogleAuth {
     this.logger.info('Google token refreshed successfully');
   }
 
-  private async authorizeInteractive(): Promise<OAuth2Client> {
-    if (!this.oauth2Client) throw new Error('OAuth client not initialized');
+  private async authorizeInteractive(clientId: string, clientSecret: string, useMyHA: boolean): Promise<OAuth2Client> {
+    const port = this.config.oauth_port || 3000;
+
+    if (useMyHA) {
+      // Using my.home-assistant.io redirect flow
+      return this.runMyHAOAuthFlow(clientId, clientSecret, port);
+    }
+
+    // Standard OAuth flow with configurable or auto-detected redirect
+    const callbackPath = this.config.oauth_callback_path || '/oauth/google/callback';
+    const redirectUri = this.config.oauth_redirect_url || `http://localhost:${port}${callbackPath}`;
+
+    return this.runStandardOAuthFlow(clientId, clientSecret, redirectUri, port, callbackPath);
+  }
+
+  /**
+   * OAuth flow using my.home-assistant.io as the redirect proxy.
+   * This works like Home Assistant addons - Google redirects to my.home-assistant.io,
+   * which then redirects to the user's server at /auth/external/callback.
+   */
+  private async runMyHAOAuthFlow(clientId: string, clientSecret: string, port: number): Promise<OAuth2Client> {
+    this.oauth2Client = new google.auth.OAuth2(clientId, clientSecret, MY_HA_REDIRECT_URL);
+
+    // Generate state for CSRF protection
+    const state = randomBytes(32).toString('hex');
 
     const authUrl = this.oauth2Client.generateAuthUrl({
       access_type: 'offline',
       scope: SCOPES,
-      prompt: 'consent', // Force refresh token generation
+      prompt: 'consent',
+      state,
     });
 
-    // Check if running interactively (TTY) or in Docker/non-interactive mode
-    const isInteractive = process.stdin.isTTY;
+    // Start server and wait for callback on the my.home-assistant.io callback path
+    const code = await this.waitForAuthCallback(port, MY_HA_CALLBACK_PATH, state, true);
 
-    let code: string;
+    const { tokens } = await this.oauth2Client.getToken(code);
+    this.oauth2Client.setCredentials(tokens);
+    await this.saveToken(tokens as unknown as Token);
 
-    if (isInteractive) {
-      console.log('\n==========================================');
-      console.log('Google Authorization Required');
-      console.log('==========================================');
-      console.log('\n1. Visit this URL to authorize the application:\n');
-      console.log(authUrl);
-      console.log('\n2. After authorizing, Google will display an authorization code.');
-      console.log('3. Copy that code and paste it below.\n');
-      console.log('==========================================\n');
+    this.logger.info('Google authorization successful (via my.home-assistant.io)');
+    return this.oauth2Client;
+  }
 
-      code = await this.promptForAuthCode();
-    } else {
-      // Non-interactive mode (Docker) - use web interface
-      console.log('\n==========================================');
-      console.log('Google Authorization Required');
-      console.log('==========================================');
-      console.log('\n1. Visit this URL to authorize the application:\n');
-      console.log(authUrl);
-      console.log('\n2. After authorizing, Google will display an authorization code.');
-      console.log(`3. Enter the code at: http://localhost:${AUTH_WEB_PORT}/auth\n`);
-      console.log('==========================================\n');
+  /**
+   * Standard OAuth flow with direct redirect to user's server.
+   */
+  private async runStandardOAuthFlow(
+    clientId: string,
+    clientSecret: string,
+    redirectUri: string,
+    port: number,
+    callbackPath: string
+  ): Promise<OAuth2Client> {
+    this.oauth2Client = new google.auth.OAuth2(clientId, clientSecret, redirectUri);
 
-      code = await this.waitForAuthCodeViaWeb(authUrl);
-    }
+    // Generate state for CSRF protection
+    const state = randomBytes(32).toString('hex');
+
+    // Start server and wait for callback
+    const code = await this.waitForAuthCallback(port, callbackPath, state, false);
 
     const { tokens } = await this.oauth2Client.getToken(code);
     this.oauth2Client.setCredentials(tokens);
@@ -158,37 +238,16 @@ export class GoogleAuth {
     return this.oauth2Client;
   }
 
-  private async promptForAuthCode(): Promise<string> {
+  private async waitForAuthCallback(
+    port: number,
+    callbackPath: string,
+    expectedState: string,
+    isMyHAFlow: boolean
+  ): Promise<string> {
     return new Promise((resolve, reject) => {
-      const rl = createInterface({
-        input: process.stdin,
-        output: process.stdout,
-      });
+      let authUrl: string | null = null;
 
-      // Timeout after 5 minutes
-      const timeout = setTimeout(() => {
-        rl.close();
-        reject(new Error('Authorization timeout (5 minutes)'));
-      }, 300000);
-
-      rl.question('Enter authorization code: ', (code) => {
-        clearTimeout(timeout);
-        rl.close();
-
-        const trimmedCode = code.trim();
-        if (!trimmedCode) {
-          reject(new Error('No authorization code provided'));
-          return;
-        }
-
-        resolve(trimmedCode);
-      });
-    });
-  }
-
-  private async waitForAuthCodeViaWeb(authUrl: string): Promise<string> {
-    return new Promise((resolve, reject) => {
-      const server = createServer(async (req, res) => {
+      this.server = createServer(async (req: IncomingMessage, res: ServerResponse) => {
         try {
           if (!req.url) {
             res.writeHead(400);
@@ -196,98 +255,52 @@ export class GoogleAuth {
             return;
           }
 
-          const url = new URL(req.url, `http://localhost:${AUTH_WEB_PORT}`);
+          const url = new URL(req.url, `http://localhost:${port}`);
 
-          // Serve the auth form page
-          if (url.pathname === '/auth' && req.method === 'GET') {
-            res.writeHead(200, { 'Content-Type': 'text/html' });
-            res.end(`
-              <!DOCTYPE html>
-              <html>
-                <head>
-                  <title>Google Authorization</title>
-                  <style>
-                    body { font-family: sans-serif; max-width: 600px; margin: 50px auto; padding: 20px; }
-                    h1 { color: #333; }
-                    .step { margin: 20px 0; padding: 15px; background: #f5f5f5; border-radius: 5px; }
-                    .step-number { font-weight: bold; color: #4285f4; }
-                    a { color: #4285f4; word-break: break-all; }
-                    input[type="text"] { width: 100%; padding: 10px; font-size: 16px; margin: 10px 0; box-sizing: border-box; }
-                    button { background: #4285f4; color: white; padding: 12px 24px; border: none; border-radius: 5px; font-size: 16px; cursor: pointer; }
-                    button:hover { background: #3367d6; }
-                    .error { color: red; margin-top: 10px; }
-                  </style>
-                </head>
-                <body>
-                  <h1>Google Authorization Required</h1>
-                  <div class="step">
-                    <span class="step-number">Step 1:</span>
-                    <a href="${authUrl}" target="_blank">Click here to authorize with Google</a>
-                  </div>
-                  <div class="step">
-                    <span class="step-number">Step 2:</span>
-                    After authorizing, Google will display an authorization code. Copy that code.
-                  </div>
-                  <div class="step">
-                    <span class="step-number">Step 3:</span>
-                    Paste the authorization code below:
-                    <form method="POST" action="/auth">
-                      <input type="text" name="code" placeholder="Paste authorization code here" required autofocus />
-                      <button type="submit">Submit</button>
-                    </form>
-                  </div>
-                </body>
-              </html>
-            `);
-            return;
-          }
+          // Handle the callback path
+          if (url.pathname === callbackPath) {
+            const code = url.searchParams.get('code');
+            const state = url.searchParams.get('state');
+            const error = url.searchParams.get('error');
 
-          // Handle form submission
-          if (url.pathname === '/auth' && req.method === 'POST') {
-            let body = '';
-            req.on('data', chunk => { body += chunk; });
-            req.on('end', () => {
-              const params = new URLSearchParams(body);
-              const code = params.get('code')?.trim();
+            if (error) {
+              res.writeHead(400, { 'Content-Type': 'text/html' });
+              res.end(`<html><body><h1>Authorization Failed</h1><p>Error: ${error}</p></body></html>`);
+              this.server?.close();
+              reject(new Error(`OAuth error: ${error}`));
+              return;
+            }
 
-              if (!code) {
-                res.writeHead(400, { 'Content-Type': 'text/html' });
-                res.end(`
-                  <html>
-                    <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-                      <h1>Error</h1>
-                      <p>No authorization code provided. <a href="/auth">Try again</a></p>
-                    </body>
-                  </html>
-                `);
-                return;
-              }
+            // Verify state to prevent CSRF (skip for my.home-assistant.io flow as state may be transformed)
+            if (!isMyHAFlow && state !== expectedState) {
+              res.writeHead(400, { 'Content-Type': 'text/html' });
+              res.end(`<html><body><h1>Authorization Failed</h1><p>Invalid state parameter</p></body></html>`);
+              this.server?.close();
+              reject(new Error('Invalid state parameter'));
+              return;
+            }
 
+            if (code) {
               res.writeHead(200, { 'Content-Type': 'text/html' });
-              res.end(`
-                <html>
-                  <head><title>Authorization Successful</title></head>
-                  <body style="font-family: sans-serif; text-align: center; padding: 50px;">
-                    <h1 style="color: green;">Authorization Successful</h1>
-                    <p>You can close this window. The application will continue automatically.</p>
-                  </body>
-                </html>
-              `);
-              server.close();
+              res.end(SUCCESS_HTML);
+              this.server?.close();
               resolve(code);
-            });
+              return;
+            }
+
+            res.writeHead(400);
+            res.end('Missing authorization code');
             return;
           }
 
-          // Redirect root to /auth
-          if (url.pathname === '/') {
-            res.writeHead(302, { 'Location': '/auth' });
+          // For any other path, redirect to auth URL if available
+          if (authUrl) {
+            res.writeHead(302, { Location: authUrl });
             res.end();
-            return;
+          } else {
+            res.writeHead(404);
+            res.end('Not found');
           }
-
-          res.writeHead(404);
-          res.end('Not found');
         } catch (error) {
           res.writeHead(500);
           res.end('Internal error');
@@ -295,18 +308,48 @@ export class GoogleAuth {
         }
       });
 
-      server.listen(AUTH_WEB_PORT, '0.0.0.0', () => {
-        this.logger.info(`Authorization web interface available at http://localhost:${AUTH_WEB_PORT}/auth`);
+      this.server.listen(port, '0.0.0.0', () => {
+        // Generate the auth URL after server is listening
+        authUrl = this.oauth2Client!.generateAuthUrl({
+          access_type: 'offline',
+          scope: SCOPES,
+          prompt: 'consent',
+          state: expectedState,
+        });
+
+        this.logger.info({ port, callbackPath }, `OAuth callback server listening`);
+
+        console.log('\n==========================================');
+        console.log('Google Authorization Required');
+        console.log('==========================================');
+
+        if (isMyHAFlow) {
+          console.log('\nUsing my.home-assistant.io OAuth redirect.');
+          console.log('\nBefore proceeding, ensure you have:');
+          console.log('1. Set your server URL at https://my.home-assistant.io');
+          console.log(`2. Your server is accessible on port ${port}`);
+          console.log('\nThen visit this URL to authorize:\n');
+        } else {
+          console.log('\nVisit this URL to authorize:\n');
+        }
+
+        console.log(authUrl);
+        console.log('\n==========================================\n');
       });
 
-      // Timeout after 10 minutes for web-based auth
+      // Timeout after 5 minutes
       const timeout = setTimeout(() => {
-        server.close();
-        reject(new Error('Authorization timeout (10 minutes)'));
-      }, 600000);
+        this.server?.close();
+        reject(new Error('Authorization timeout (5 minutes)'));
+      }, 300000);
 
-      server.on('close', () => {
+      this.server.on('close', () => {
         clearTimeout(timeout);
+      });
+
+      this.server.on('error', (err: Error) => {
+        clearTimeout(timeout);
+        reject(new Error(`OAuth server error: ${err.message}`));
       });
     });
   }

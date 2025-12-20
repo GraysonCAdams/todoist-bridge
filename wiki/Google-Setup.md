@@ -59,11 +59,12 @@ By default, your app is in "Testing" mode, which means refresh tokens expire aft
 
 1. Go to **APIs & Services** > **Credentials**
 2. Click **Create Credentials** > **OAuth client ID**
-3. Select **Desktop app** as the application type
-4. Enter a name (e.g., "Todoist Bridge Desktop")
-5. Click **Create**
-6. Click **Download JSON** on the confirmation dialog
-7. Save the file as `credentials/google-credentials.json`
+3. Select **Web application** as the application type
+4. Enter a name (e.g., "Todoist Bridge")
+5. Under **Authorized redirect URIs**, add: `https://my.home-assistant.io/redirect/oauth`
+6. Click **Create**
+7. Click **Download JSON** on the confirmation dialog
+8. Save the file as `credentials/google-credentials.json`
 
 ### 6. Verify Credentials File
 
@@ -71,40 +72,76 @@ Your credentials file should look similar to:
 
 ```json
 {
-  "installed": {
+  "web": {
     "client_id": "123456789-abcdefg.apps.googleusercontent.com",
     "project_id": "todoist-bridge-12345",
     "auth_uri": "https://accounts.google.com/o/oauth2/auth",
     "token_uri": "https://oauth2.googleapis.com/token",
     "auth_provider_x509_cert_url": "https://www.googleapis.com/oauth2/v1/certs",
     "client_secret": "GOCSPX-...",
-    "redirect_uris": ["http://localhost"]
+    "redirect_uris": ["https://my.home-assistant.io/redirect/oauth"]
   }
 }
 ```
 
-## First Run Authorization
+## Production OAuth Setup (Recommended)
 
-On first run, Todoist Bridge will:
+For production deployments (Docker, reverse proxy, Home Assistant, etc.), we use **my.home-assistant.io** as an OAuth redirect proxy. This provides a stable HTTPS endpoint that works regardless of how you access your server.
 
-1. Print an authorization URL to the console
-2. Start a local server on port 3000
-3. Wait for you to complete authorization
+### How It Works
 
-Follow these steps:
+1. Google redirects to `https://my.home-assistant.io/redirect/oauth`
+2. my.home-assistant.io reads your server URL from browser localStorage
+3. It redirects to your server at `/auth/external/callback` with the auth code
+4. Your server receives the code and completes authentication
 
-1. Copy the URL printed to the console
-2. Open it in your browser
-3. Sign in with your Google account
-4. Grant access to Google Tasks
-5. You'll be redirected to localhost
-6. The token is automatically captured and saved
+### Setup Steps
 
-The token is saved to `credentials/google-token.json` and refreshed automatically.
+1. **Configure your server URL at my.home-assistant.io**:
+   - Go to https://my.home-assistant.io
+   - Enter your Todoist Bridge server URL (e.g., `http://192.168.1.100:3000`)
+   - This URL is stored in your browser's localStorage
+
+2. **Enable in config.yaml**:
+   ```yaml
+   sources:
+     google:
+       enabled: true
+       use_homeassistant_redirect: true
+       oauth_port: 3000
+   ```
+
+3. **Ensure Google Cloud Console has the correct redirect URI**:
+   - `https://my.home-assistant.io/redirect/oauth`
+
+### First Authorization
+
+1. Start Todoist Bridge
+2. It will print an authorization URL to the console
+3. Visit the URL in your browser
+4. Sign in with your Google account
+5. Grant access to Google Tasks
+6. You'll be redirected through my.home-assistant.io to your server
+7. The token is saved automatically
+
+## Alternative: Direct OAuth
+
+If you prefer not to use my.home-assistant.io, you can configure a direct redirect:
+
+```yaml
+sources:
+  google:
+    enabled: true
+    use_homeassistant_redirect: false
+    oauth_redirect_url: "https://your-server.example.com/oauth/google/callback"
+    oauth_port: 3000
+```
+
+Note: Your redirect URL must be HTTPS for production use with Google OAuth.
 
 ## Configuration
 
-After setup, configure Google Tasks in `config.yaml`:
+Full configuration example:
 
 ```yaml
 sources:
@@ -112,6 +149,11 @@ sources:
     enabled: true
     credentials_path: "./credentials/google-credentials.json"
     token_path: "./credentials/google-token.json"
+
+    # Use my.home-assistant.io OAuth redirect (recommended)
+    use_homeassistant_redirect: true
+    oauth_port: 3000
+
     lists:
       - source_list_id: "YOUR_LIST_ID"
         todoist_project_id: "YOUR_PROJECT_ID"
@@ -119,26 +161,31 @@ sources:
 
 See [Finding IDs](Finding-IDs) to get your Google Task List IDs.
 
-## Docker Considerations
+## Docker Deployment
 
-When running in Docker:
-
-1. Complete OAuth authorization on the host first
-2. Mount the credentials directory:
+### Docker Compose Example
 
 ```yaml
-volumes:
-  - ./credentials:/app/credentials
+version: '3.8'
+services:
+  todoist-bridge:
+    image: ghcr.io/graysoncadams/todoist-bridge:latest
+    ports:
+      - "3000:3000"  # OAuth callback port
+    volumes:
+      - ./credentials:/app/credentials
+      - ./config.yaml:/app/config.yaml:ro
+      - ./data:/app/data
 ```
 
-Or run once interactively:
+### Reverse Proxy Configuration (nginx)
 
-```bash
-docker run -it --rm \
-  -p 3000:3000 \
-  -v $(pwd)/credentials:/app/credentials \
-  -v $(pwd)/config.yaml:/app/config.yaml:ro \
-  ghcr.io/graysoncadams/todoist-bridge:latest
+```nginx
+location /auth/external/callback {
+    proxy_pass http://todoist-bridge:3000;
+    proxy_set_header Host $host;
+    proxy_set_header X-Real-IP $remote_addr;
+}
 ```
 
 ## Token Refresh
@@ -155,14 +202,20 @@ docker run -it --rm \
 - Check that the Tasks API is enabled
 - Verify the OAuth consent screen is configured
 
-### "Invalid client_id"
+### "redirect_uri_mismatch"
 
-- Download credentials again from Cloud Console
-- Ensure you're using the correct project
+- Ensure Google Cloud Console has: `https://my.home-assistant.io/redirect/oauth`
+- If using direct OAuth, the URI must exactly match your `oauth_redirect_url`
+
+### my.home-assistant.io shows "Instance not configured"
+
+- Visit https://my.home-assistant.io and enter your server URL
+- The URL is stored in browser localStorage, so use the same browser for auth
 
 ### "Authorization timeout"
 
 - Complete browser authorization within 5 minutes
+- Ensure your server is accessible from your browser
 - Check that port 3000 is not blocked
 
 ### Token expired
@@ -177,7 +230,7 @@ npm start  # Re-authorize
 - Keep `google-credentials.json` secure
 - Never commit credentials to version control
 - The `.gitignore` excludes the credentials directory
-- Consider using environment variables in CI/CD
+- my.home-assistant.io only stores your server URL in browser localStorage
 
 ## Next Steps
 
