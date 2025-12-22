@@ -23,7 +23,7 @@
     "alexa-remote2": "^8.0.4",
     "better-sqlite3": "^11.5.0",
     "date-fns": "^4.1.0",
-    "dotenv": "^16.4.5",
+    "dotenv": "^17.2.3",
     "googleapis": "^144.0.0",
     "p-retry": "^6.2.0",
     "pino": "^9.5.0",
