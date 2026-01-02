@@ -1,6 +1,9 @@
 /**
  * Microsoft Authentication using MSAL
  * Uses Device Code Flow for easy CLI authentication
+ *
+ * IMPORTANT: Uses MSAL's cache plugin to persist refresh tokens.
+ * This ensures silent token refresh works across container restarts.
  */
 
 import {
@@ -10,6 +13,8 @@ import {
   SilentFlowRequest,
   AccountInfo,
   AuthenticationResult,
+  ICachePlugin,
+  TokenCacheContext,
 } from '@azure/msal-node';
 import { readFileSync, writeFileSync, existsSync, mkdirSync } from 'fs';
 import { dirname } from 'path';
@@ -24,11 +29,11 @@ const SCOPES = [
 ];
 
 /**
- * Token storage format
+ * Legacy token storage format (for migration)
  */
-export interface MicrosoftToken {
+interface LegacyMicrosoftToken {
   accessToken: string;
-  expiresOn: string; // ISO date string
+  expiresOn: string;
   account: {
     homeAccountId: string;
     environment: string;
@@ -38,6 +43,15 @@ export interface MicrosoftToken {
     name?: string;
   };
   scopes: string[];
+}
+
+/**
+ * New token storage format - stores MSAL's full cache
+ */
+interface MicrosoftTokenCache {
+  version: 2;
+  msalCache: string; // MSAL's serialized cache
+  accountHomeId?: string; // For quick account lookup
 }
 
 export class MicrosoftAuth {
@@ -62,16 +76,16 @@ export class MicrosoftAuth {
       return this.cachedAccessToken;
     }
 
-    // Initialize MSAL if needed
+    // Initialize MSAL if needed (loads cache from disk)
     if (!this.msalApp) {
-      this.initializeMsal();
+      await this.initializeMsal();
     }
 
-    // Try to load existing token and acquire silently
-    const savedToken = this.loadToken();
-    if (savedToken?.account) {
+    // Try to acquire token silently first (uses MSAL's internal cache with refresh token)
+    const accounts = await this.msalApp!.getTokenCache().getAllAccounts();
+    if (accounts.length > 0) {
+      this.currentAccount = accounts[0];
       try {
-        this.currentAccount = this.reconstructAccountInfo(savedToken.account);
         const silentResult = await this.acquireTokenSilent();
         if (silentResult) {
           this.cacheToken(silentResult);
@@ -89,7 +103,56 @@ export class MicrosoftAuth {
     return result.accessToken;
   }
 
-  private initializeMsal(): void {
+  /**
+   * Create MSAL cache plugin that persists to disk
+   */
+  private createCachePlugin(): ICachePlugin {
+    const tokenPath = this.config.token_path;
+    const logger = this.logger;
+
+    return {
+      beforeCacheAccess: async (cacheContext: TokenCacheContext): Promise<void> => {
+        // Load cache from disk if it exists
+        if (existsSync(tokenPath)) {
+          try {
+            const content = readFileSync(tokenPath, 'utf-8');
+            const parsed = JSON.parse(content);
+
+            // Handle new format (version 2)
+            if (parsed.version === 2 && parsed.msalCache) {
+              cacheContext.tokenCache.deserialize(parsed.msalCache);
+            }
+            // Legacy format - will need re-auth (can't migrate refresh token)
+            else if (parsed.accessToken) {
+              logger.info('Found legacy token format, re-authentication required for refresh token support');
+            }
+          } catch (error) {
+            logger.warn({ err: error }, 'Failed to load Microsoft token cache');
+          }
+        }
+      },
+
+      afterCacheAccess: async (cacheContext: TokenCacheContext): Promise<void> => {
+        // Save cache to disk if it changed
+        if (cacheContext.cacheHasChanged) {
+          const dir = dirname(tokenPath);
+          if (!existsSync(dir)) {
+            mkdirSync(dir, { recursive: true });
+          }
+
+          const cacheData: MicrosoftTokenCache = {
+            version: 2,
+            msalCache: cacheContext.tokenCache.serialize(),
+          };
+
+          writeFileSync(tokenPath, JSON.stringify(cacheData, null, 2));
+          logger.debug('Microsoft token cache saved');
+        }
+      },
+    };
+  }
+
+  private async initializeMsal(): Promise<void> {
     if (!this.config.client_id) {
       throw new Error(
         'Microsoft client_id not configured. ' +
@@ -97,10 +160,15 @@ export class MicrosoftAuth {
       );
     }
 
+    const cachePlugin = this.createCachePlugin();
+
     const msalConfig: Configuration = {
       auth: {
         clientId: this.config.client_id,
         authority: `https://login.microsoftonline.com/${this.config.tenant_id || 'common'}`,
+      },
+      cache: {
+        cachePlugin,
       },
       system: {
         loggerOptions: {
@@ -111,20 +179,6 @@ export class MicrosoftAuth {
     };
 
     this.msalApp = new PublicClientApplication(msalConfig);
-  }
-
-  private reconstructAccountInfo(savedAccount: MicrosoftToken['account']): AccountInfo {
-    return {
-      homeAccountId: savedAccount.homeAccountId,
-      environment: savedAccount.environment,
-      tenantId: savedAccount.tenantId,
-      username: savedAccount.username,
-      localAccountId: savedAccount.localAccountId,
-      name: savedAccount.name,
-      idTokenClaims: undefined,
-      nativeAccountId: undefined,
-      authorityType: 'MSSTS',
-    };
   }
 
   private async acquireTokenSilent(): Promise<AuthenticationResult | null> {
@@ -138,7 +192,6 @@ export class MicrosoftAuth {
     try {
       const result = await this.msalApp.acquireTokenSilent(silentRequest);
       if (result) {
-        await this.saveToken(result);
         this.logger.info('Microsoft token refreshed silently');
         return result;
       }
@@ -175,7 +228,6 @@ export class MicrosoftAuth {
     }
 
     this.currentAccount = result.account;
-    await this.saveToken(result);
     this.logger.info('Microsoft authentication successful');
     return result;
   }
@@ -185,67 +237,14 @@ export class MicrosoftAuth {
     this.tokenExpiresAt = result.expiresOn?.getTime() || Date.now() + 3600000;
   }
 
-  private loadToken(): MicrosoftToken | null {
-    const tokenPath = this.config.token_path;
-    if (!existsSync(tokenPath)) {
-      return null;
-    }
-
-    try {
-      const content = readFileSync(tokenPath, 'utf-8');
-      const token: MicrosoftToken = JSON.parse(content);
-
-      // Check if token is expired (with 5 minute buffer)
-      const expiresOn = new Date(token.expiresOn);
-      if (Date.now() >= expiresOn.getTime() - 300000) {
-        this.logger.debug('Saved token is expired or expiring soon');
-        // Don't return null - we can still use the account info for silent refresh
-      }
-
-      return token;
-    } catch (error) {
-      this.logger.warn({ err: error }, 'Failed to load Microsoft token');
-      return null;
-    }
-  }
-
-  private async saveToken(result: AuthenticationResult): Promise<void> {
-    const tokenPath = this.config.token_path;
-    const dir = dirname(tokenPath);
-
-    if (!existsSync(dir)) {
-      mkdirSync(dir, { recursive: true });
-    }
-
-    const token: MicrosoftToken = {
-      accessToken: result.accessToken,
-      expiresOn: result.expiresOn?.toISOString() || new Date(Date.now() + 3600000).toISOString(),
-      account: result.account ? {
-        homeAccountId: result.account.homeAccountId,
-        environment: result.account.environment,
-        tenantId: result.account.tenantId,
-        username: result.account.username,
-        localAccountId: result.account.localAccountId,
-        name: result.account.name,
-      } : {
-        homeAccountId: '',
-        environment: '',
-        tenantId: '',
-        username: '',
-        localAccountId: '',
-      },
-      scopes: result.scopes,
-    };
-
-    writeFileSync(tokenPath, JSON.stringify(token, null, 2));
-    this.logger.debug('Microsoft token saved');
-  }
-
   /**
    * Get the current user's ID (for assignment in shared lists)
    */
   async getCurrentUserId(): Promise<string | null> {
-    const token = this.loadToken();
-    return token?.account?.localAccountId || null;
+    if (!this.msalApp) {
+      await this.initializeMsal();
+    }
+    const accounts = await this.msalApp!.getTokenCache().getAllAccounts();
+    return accounts[0]?.localAccountId || null;
   }
 }
