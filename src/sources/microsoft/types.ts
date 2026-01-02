@@ -53,8 +53,9 @@ export const MicrosoftSourceConfigSchema = z.object({
   lists: z.array(MicrosoftListMappingSchema).default([]),
 
   /**
-   * Assign items synced from Todoist to yourself
-   * Useful for shared lists where you want items assigned to you
+   * Set reminders on tasks synced from Todoist when they have a due time
+   * Note: Microsoft Graph API doesn't support task assignment in shared lists,
+   * so this only affects reminder settings, not task assignments.
    */
   assign_to_self: z.boolean().default(false),
 

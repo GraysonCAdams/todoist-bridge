@@ -76,7 +76,7 @@ Enable only what you need - each source is independently configurable.
 | **Alexa Shopping List** | Keep your shopping list in sync |
 | **Microsoft To-Do Sync** | Bi-directional sync with Microsoft To-Do (great for shared lists) |
 | **Completion Sync** | Complete tasks on either platform, syncs to the other |
-| **Shared List Support** | Auto-assign items to yourself in shared Microsoft lists |
+| **Shared List Support** | Filter shared Microsoft lists to only sync your items |
 | **Custom Tags** | Apply labels to synced tasks for easy filtering |
 | **Flexible Mapping** | Map any source list to any Todoist project or Inbox |
 | **Subtask Support** | Single-level subtask hierarchy preserved |
@@ -269,7 +269,7 @@ sources:
       - list_name: "Groceries"
         todoist_project_id: "inbox"
         tags: ["grocery"]
-    assign_to_self: true               # For shared lists
+    assign_to_self: true               # Set reminders on tasks with due times
     exclude_others_assignments: true   # Ignore items from other users
 ```
 
@@ -329,7 +329,7 @@ sources:
       - list_name: "Groceries"
         todoist_project_id: "inbox"
         tags: ["grocery"]
-    assign_to_self: false              # Assign items from Todoist to yourself
+    assign_to_self: false              # Set reminders on tasks with due times
     exclude_others_assignments: true   # Ignore items from other users
 
 # Global sync settings

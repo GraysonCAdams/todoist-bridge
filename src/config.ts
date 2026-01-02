@@ -69,7 +69,8 @@ const MicrosoftSourceSchema = z.object({
   token_path: z.string().default('./credentials/microsoft-token.json'),
   poll_interval_minutes: z.number().min(1).max(60).default(5),
   lists: z.array(MicrosoftListMappingSchema).default([]),
-  // Assign items synced from Todoist to yourself (useful for shared lists)
+  // Set reminders on tasks synced from Todoist when they have a due time
+  // Note: Microsoft API doesn't support task assignment - this only affects reminders
   assign_to_self: z.boolean().default(false),
   // Only sync items you created or unassigned (exclude items from others in shared lists)
   exclude_others_assignments: z.boolean().default(true),

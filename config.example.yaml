@@ -129,7 +129,8 @@ sources:
       #   todoist_project_id: "inbox"       # Todoist Project ID (or "inbox")
       #   tags: ["grocery"]                 # Tags to apply in Todoist
 
-    # Assign items from Todoist to yourself (for shared lists)
+    # Set reminders on tasks synced from Todoist when they have a due time
+    # Note: Microsoft API doesn't support task assignment in shared lists
     assign_to_self: false
 
     # Exclude items from other users in shared lists
