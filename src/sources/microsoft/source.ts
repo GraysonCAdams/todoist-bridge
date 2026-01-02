@@ -86,6 +86,24 @@ export class MicrosoftTodoSource implements BidirectionalSourceEngine {
       context.logger
     );
 
+    // List all available Microsoft To-Do lists for discovery
+    try {
+      const allLists = await msClient.getLists();
+      context.logger.info('='.repeat(60));
+      context.logger.info('Available Microsoft To-Do lists:');
+      for (const list of allLists) {
+        context.logger.info({
+          name: list.displayName,
+          id: list.id,
+          isShared: list.isShared,
+          isOwner: list.isOwner,
+        }, `  - "${list.displayName}"`);
+      }
+      context.logger.info('='.repeat(60));
+    } catch (error) {
+      context.logger.warn({ err: error }, 'Could not fetch Microsoft To-Do lists for discovery');
+    }
+
     // Get current user ID for filtering assignments
     let currentUserId: string | null = null;
     if (config.exclude_others_assignments) {

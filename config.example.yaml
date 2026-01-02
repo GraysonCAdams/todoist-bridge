@@ -112,8 +112,10 @@ sources:
     # Get from: Azure Portal > App registrations > Your app > Overview
     client_id: ""
 
-    # Azure AD tenant ID (from same page, or use "common" for multi-tenant)
-    tenant_id: "common"
+    # Azure AD tenant ID
+    # - "consumers": Personal Microsoft accounts only (recommended)
+    # - "common": Multi-tenant + personal accounts
+    tenant_id: "consumers"
 
     # Path to store OAuth tokens (auto-generated after first auth)
     token_path: "./credentials/microsoft-token.json"

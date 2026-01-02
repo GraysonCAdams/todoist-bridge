@@ -264,7 +264,7 @@ sources:
   microsoft:
     enabled: true
     client_id: "your-azure-app-client-id"
-    tenant_id: "your-azure-tenant-id"  # or "common"
+    tenant_id: "consumers"  # Use "consumers" for personal Microsoft accounts
     lists:
       - list_name: "Groceries"
         todoist_project_id: "inbox"
@@ -322,7 +322,7 @@ sources:
   microsoft:
     enabled: false
     client_id: "your-azure-app-client-id"
-    tenant_id: "common"
+    tenant_id: "consumers"  # Use "consumers" for personal accounts
     token_path: "./credentials/microsoft-token.json"
     poll_interval_minutes: 3
     lists:
@@ -428,20 +428,19 @@ On first run, you'll be prompted to authorize with Google:
 2. Click **New registration**
 3. Configure the app:
    - **Name:** `Todoist Bridge` (or any name you prefer)
-   - **Supported account types:** Choose based on your needs:
-     - "Personal Microsoft accounts only" - for personal @outlook.com/@hotmail.com accounts
-     - "Accounts in any organizational directory and personal Microsoft accounts" - for both work/school and personal
+   - **Supported account types:** Select **"Personal Microsoft accounts only"** (recommended for personal To-Do)
 4. Click **Register** (leave Redirect URI blank)
 5. Copy the **Application (client) ID** - you'll need this for config
-6. Copy the **Directory (tenant) ID** - you'll need this for config
-7. Go to **API permissions** > **Add a permission**:
+6. Go to **API permissions** > **Add a permission**:
    - Select **Microsoft Graph**
    - Choose **Delegated permissions**
    - Add: `Tasks.ReadWrite`, `User.Read`
    - Click **Add permissions**
-8. Go to **Authentication**:
+7. Go to **Authentication**:
    - Under **Advanced settings**, set **Allow public client flows** to **Yes**
    - Click **Save**
+
+> **Important:** Use `tenant_id: "consumers"` in your config for personal Microsoft accounts (@outlook.com, @hotmail.com, etc.)
 
 **Device Code Authentication Flow:**
 

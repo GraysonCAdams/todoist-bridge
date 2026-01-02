@@ -86,6 +86,23 @@ async function main() {
   logger.info('Todoist authentication successful');
   const todoistClient = new TodoistClient(todoistAuth.getClient(), logger);
 
+  // List all available Todoist projects for discovery
+  try {
+    const projects = await todoistClient.getProjects();
+    logger.info('='.repeat(60));
+    logger.info('Available Todoist projects:');
+    for (const project of projects) {
+      logger.info({
+        name: project.name,
+        id: project.id,
+      }, `  - "${project.name}" (ID: ${project.id})`);
+    }
+    logger.info('  - "inbox" (use "inbox" to sync to your Todoist Inbox)');
+    logger.info('='.repeat(60));
+  } catch (error) {
+    logger.warn({ err: error }, 'Could not fetch Todoist projects for discovery');
+  }
+
   // Create source context
   const context: SourceContext = {
     logger,

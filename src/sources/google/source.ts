@@ -60,6 +60,22 @@ export class GoogleTasksSource implements SourceEngine {
     const oauthClient = await googleAuth.getAuthenticatedClient();
     const googleClient = new GoogleTasksClient(oauthClient, context.logger);
 
+    // List all available Google Task lists for discovery
+    try {
+      const allLists = await googleClient.getTaskLists();
+      context.logger.info('='.repeat(60));
+      context.logger.info('Available Google Task lists:');
+      for (const list of allLists) {
+        context.logger.info({
+          name: list.title,
+          id: list.id,
+        }, `  - "${list.title}" (ID: ${list.id})`);
+      }
+      context.logger.info('='.repeat(60));
+    } catch (error) {
+      context.logger.warn({ err: error }, 'Could not fetch Google Task lists for discovery');
+    }
+
     context.logger.info({ listCount: config.lists.length }, 'Google Tasks source initialized');
 
     return new GoogleTasksSource(
