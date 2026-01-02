@@ -5,6 +5,7 @@ import { TodoistAuth } from './auth/todoist.js';
 import { TodoistClient } from './clients/todoist.js';
 import { GoogleTasksSource } from './sources/google/index.js';
 import { AlexaRemindersSource, AlexaShoppingSource, AlexaAuth, AlexaClient } from './sources/alexa/index.js';
+import { MicrosoftTodoSource } from './sources/microsoft/index.js';
 import type { SourceEngine, SyncResult, SourceContext } from './core/types.js';
 import { mergeSyncResults } from './core/types.js';
 import { readFileSync } from 'fs';
@@ -181,6 +182,32 @@ async function main() {
     }
   } else {
     logger.info('Alexa integration disabled or not configured');
+  }
+
+  // Initialize Microsoft To-Do source (bi-directional sync)
+  if (config.sources.microsoft.enabled && config.sources.microsoft.lists.length > 0) {
+    try {
+      const microsoftSource = await MicrosoftTodoSource.create(config.sources.microsoft, context);
+      if (microsoftSource) {
+        const pollInterval = config.sources.microsoft.poll_interval_minutes || 5;
+        managedSources.push({
+          engine: microsoftSource,
+          pollIntervalMs: pollInterval * 60 * 1000,
+          lastSyncAt: 0,
+          timeout: null,
+        });
+        logger.info({
+          source: 'Microsoft To-Do',
+          pollInterval,
+          listCount: config.sources.microsoft.lists.length,
+          syncDirection: 'bidirectional',
+        }, 'Source initialized');
+      }
+    } catch (error) {
+      logger.error({ err: error }, 'Failed to initialize Microsoft To-Do integration');
+    }
+  } else {
+    logger.info('Microsoft To-Do source disabled or no lists configured');
   }
 
   if (managedSources.length === 0) {

@@ -103,6 +103,36 @@ sources:
       #   - "shopping"
       #   - "alexa"
 
+  # Microsoft To-Do source (bi-directional sync)
+  # Syncs between Microsoft To-Do and Todoist in both directions
+  microsoft:
+    enabled: false
+
+    # Azure AD Application (client) ID
+    # Get from: Azure Portal > App registrations > Your app > Overview
+    client_id: ""
+
+    # Azure AD tenant ID (from same page, or use "common" for multi-tenant)
+    tenant_id: "common"
+
+    # Path to store OAuth tokens (auto-generated after first auth)
+    token_path: "./credentials/microsoft-token.json"
+
+    # Polling interval in minutes (1-60)
+    poll_interval_minutes: 3
+
+    # List mappings - bi-directional sync with Todoist
+    lists:
+      # - list_name: "Groceries"            # Find list by name
+      #   todoist_project_id: "inbox"       # Todoist Project ID (or "inbox")
+      #   tags: ["grocery"]                 # Tags to apply in Todoist
+
+    # Assign items from Todoist to yourself (for shared lists)
+    assign_to_self: false
+
+    # Exclude items from other users in shared lists
+    exclude_others_assignments: true
+
 # Global sync settings
 sync:
   # Only import completed tasks on first run (retroactive import)

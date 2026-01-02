@@ -58,6 +58,22 @@ export interface AlexaShoppingItemRecord {
   applied_tags: string | null; // JSON array of applied tags
 }
 
+export interface MicrosoftTodoItemRecord {
+  id: string;
+  microsoft_id: string;
+  microsoft_list_id: string;
+  todoist_id: string | null;
+  title: string;
+  body: string | null;
+  status: string; // 'notStarted', 'completed', etc.
+  due_date: string | null;
+  microsoft_modified_at: string | null;
+  todoist_modified_at: string | null;
+  synced_at: string | null;
+  applied_tags: string | null; // JSON array of applied tags
+  content_hash: string | null; // Hash for change detection
+}
+
 export class Storage {
   private db: Database.Database;
 
@@ -156,6 +172,27 @@ export class Storage {
 
       CREATE INDEX IF NOT EXISTS idx_alexa_shopping_items_alexa_id ON alexa_shopping_items(alexa_id);
       CREATE INDEX IF NOT EXISTS idx_alexa_shopping_items_todoist_id ON alexa_shopping_items(todoist_id);
+
+      -- Microsoft To-Do items tracking (bi-directional sync)
+      CREATE TABLE IF NOT EXISTS microsoft_todo_items (
+        id TEXT PRIMARY KEY,
+        microsoft_id TEXT UNIQUE NOT NULL,
+        microsoft_list_id TEXT NOT NULL,
+        todoist_id TEXT,
+        title TEXT NOT NULL,
+        body TEXT,
+        status TEXT NOT NULL,
+        due_date TEXT,
+        microsoft_modified_at TEXT,
+        todoist_modified_at TEXT,
+        synced_at TEXT,
+        applied_tags TEXT,
+        content_hash TEXT
+      );
+
+      CREATE INDEX IF NOT EXISTS idx_microsoft_items_microsoft_id ON microsoft_todo_items(microsoft_id);
+      CREATE INDEX IF NOT EXISTS idx_microsoft_items_todoist_id ON microsoft_todo_items(todoist_id);
+      CREATE INDEX IF NOT EXISTS idx_microsoft_items_list_id ON microsoft_todo_items(microsoft_list_id);
     `);
 
     // Run migrations for existing databases
@@ -627,6 +664,152 @@ export class Storage {
     for (const item of items) {
       if (item.todoist_id && !validTodoistIds.has(item.todoist_id)) {
         this.deleteAlexaShoppingItem(item.alexa_id);
+        removed++;
+      }
+    }
+
+    return removed;
+  }
+
+  // Microsoft To-Do Item operations
+  getMicrosoftItemByMicrosoftId(microsoftId: string): MicrosoftTodoItemRecord | null {
+    const stmt = this.db.prepare('SELECT * FROM microsoft_todo_items WHERE microsoft_id = ?');
+    return stmt.get(microsoftId) as MicrosoftTodoItemRecord | undefined || null;
+  }
+
+  getMicrosoftItemByTodoistId(todoistId: string): MicrosoftTodoItemRecord | null {
+    const stmt = this.db.prepare('SELECT * FROM microsoft_todo_items WHERE todoist_id = ?');
+    return stmt.get(todoistId) as MicrosoftTodoItemRecord | undefined || null;
+  }
+
+  getAllMicrosoftItems(): MicrosoftTodoItemRecord[] {
+    const stmt = this.db.prepare('SELECT * FROM microsoft_todo_items');
+    return stmt.all() as MicrosoftTodoItemRecord[];
+  }
+
+  getMicrosoftItemsByListId(listId: string): MicrosoftTodoItemRecord[] {
+    const stmt = this.db.prepare('SELECT * FROM microsoft_todo_items WHERE microsoft_list_id = ?');
+    return stmt.all(listId) as MicrosoftTodoItemRecord[];
+  }
+
+  createMicrosoftItem(item: Omit<MicrosoftTodoItemRecord, 'id' | 'synced_at'>): MicrosoftTodoItemRecord {
+    const id = randomUUID();
+    const synced_at = new Date().toISOString();
+
+    const stmt = this.db.prepare(`
+      INSERT INTO microsoft_todo_items (
+        id, microsoft_id, microsoft_list_id, todoist_id, title, body,
+        status, due_date, microsoft_modified_at, todoist_modified_at,
+        synced_at, applied_tags, content_hash
+      ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)
+    `);
+
+    stmt.run(
+      id,
+      item.microsoft_id,
+      item.microsoft_list_id,
+      item.todoist_id,
+      item.title,
+      item.body,
+      item.status,
+      item.due_date,
+      item.microsoft_modified_at,
+      item.todoist_modified_at,
+      synced_at,
+      item.applied_tags,
+      item.content_hash
+    );
+
+    return this.getMicrosoftItemByMicrosoftId(item.microsoft_id)!;
+  }
+
+  updateMicrosoftItem(microsoftId: string, updates: Partial<Omit<MicrosoftTodoItemRecord, 'id' | 'microsoft_id'>>): void {
+    const fields: string[] = [];
+    const values: unknown[] = [];
+
+    if (updates.microsoft_list_id !== undefined) {
+      fields.push('microsoft_list_id = ?');
+      values.push(updates.microsoft_list_id);
+    }
+    if (updates.todoist_id !== undefined) {
+      fields.push('todoist_id = ?');
+      values.push(updates.todoist_id);
+    }
+    if (updates.title !== undefined) {
+      fields.push('title = ?');
+      values.push(updates.title);
+    }
+    if (updates.body !== undefined) {
+      fields.push('body = ?');
+      values.push(updates.body);
+    }
+    if (updates.status !== undefined) {
+      fields.push('status = ?');
+      values.push(updates.status);
+    }
+    if (updates.due_date !== undefined) {
+      fields.push('due_date = ?');
+      values.push(updates.due_date);
+    }
+    if (updates.microsoft_modified_at !== undefined) {
+      fields.push('microsoft_modified_at = ?');
+      values.push(updates.microsoft_modified_at);
+    }
+    if (updates.todoist_modified_at !== undefined) {
+      fields.push('todoist_modified_at = ?');
+      values.push(updates.todoist_modified_at);
+    }
+    if (updates.applied_tags !== undefined) {
+      fields.push('applied_tags = ?');
+      values.push(updates.applied_tags);
+    }
+    if (updates.content_hash !== undefined) {
+      fields.push('content_hash = ?');
+      values.push(updates.content_hash);
+    }
+
+    fields.push('synced_at = ?');
+    values.push(new Date().toISOString());
+
+    if (fields.length === 1) return; // Only synced_at, no actual updates
+
+    values.push(microsoftId);
+
+    const stmt = this.db.prepare(
+      `UPDATE microsoft_todo_items SET ${fields.join(', ')} WHERE microsoft_id = ?`
+    );
+    stmt.run(...values);
+  }
+
+  deleteMicrosoftItem(microsoftId: string): void {
+    const stmt = this.db.prepare('DELETE FROM microsoft_todo_items WHERE microsoft_id = ?');
+    stmt.run(microsoftId);
+  }
+
+  deleteMicrosoftItemByTodoistId(todoistId: string): void {
+    const stmt = this.db.prepare('DELETE FROM microsoft_todo_items WHERE todoist_id = ?');
+    stmt.run(todoistId);
+  }
+
+  /**
+   * Get all Microsoft items that have a Todoist ID (for cache validation)
+   */
+  getAllMicrosoftItemsWithTodoistId(): MicrosoftTodoItemRecord[] {
+    const stmt = this.db.prepare('SELECT * FROM microsoft_todo_items WHERE todoist_id IS NOT NULL');
+    return stmt.all() as MicrosoftTodoItemRecord[];
+  }
+
+  /**
+   * Remove Microsoft items from cache that no longer exist in Todoist
+   * Returns the number of stale items removed
+   */
+  cleanupStaleMicrosoftItems(validTodoistIds: Set<string>): number {
+    const items = this.getAllMicrosoftItemsWithTodoistId();
+    let removed = 0;
+
+    for (const item of items) {
+      if (item.todoist_id && !validTodoistIds.has(item.todoist_id)) {
+        this.deleteMicrosoftItem(item.microsoft_id);
         removed++;
       }
     }

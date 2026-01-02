@@ -52,6 +52,29 @@ const AlexaSourceSchema = z.object({
   sync_shopping_list: AlexaShoppingListSchema.default({}),
 });
 
+// Microsoft To-Do list mapping configuration
+const MicrosoftListMappingSchema = z.object({
+  source_list_id: z.string().optional(),
+  list_name: z.string().optional(),
+  todoist_project_id: z.string(),
+  include_completed: z.boolean().default(false),
+  tags: z.array(z.string()).default([]),
+});
+
+// Microsoft To-Do source configuration (bi-directional sync)
+const MicrosoftSourceSchema = z.object({
+  enabled: z.boolean().default(false),
+  client_id: z.string().default(''),
+  tenant_id: z.string().default('common'),
+  token_path: z.string().default('./credentials/microsoft-token.json'),
+  poll_interval_minutes: z.number().min(1).max(60).default(5),
+  lists: z.array(MicrosoftListMappingSchema).default([]),
+  // Assign items synced from Todoist to yourself (useful for shared lists)
+  assign_to_self: z.boolean().default(false),
+  // Only sync items you created or unassigned (exclude items from others in shared lists)
+  exclude_others_assignments: z.boolean().default(true),
+});
+
 const ConfigSchema = z.object({
   poll_interval_minutes: z.number().min(1).default(5),
 
@@ -62,6 +85,7 @@ const ConfigSchema = z.object({
   sources: z.object({
     google: GoogleSourceSchema.default({}),
     alexa: AlexaSourceSchema.default({}),
+    microsoft: MicrosoftSourceSchema.default({}),
   }).default({}),
 
   // Global sync settings (can be overridden per-list)
@@ -83,6 +107,8 @@ export type SyncMapping = z.infer<typeof SyncMappingSchema>;
 export type GoogleSource = z.infer<typeof GoogleSourceSchema>;
 export type AlexaSource = z.infer<typeof AlexaSourceSchema>;
 export type AlexaShoppingList = z.infer<typeof AlexaShoppingListSchema>;
+export type MicrosoftSource = z.infer<typeof MicrosoftSourceSchema>;
+export type MicrosoftListMapping = z.infer<typeof MicrosoftListMappingSchema>;
 
 function loadYamlConfig(): Partial<Config> {
   const configPaths = ['config.yaml', 'config.yml'];

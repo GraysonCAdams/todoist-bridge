@@ -1,7 +1,7 @@
 <p align="center">
   <h1 align="center">Todoist Bridge</h1>
   <p align="center">
-    Unified task synchronization from Google Tasks and Alexa to Todoist
+    Unified task synchronization from Google Tasks, Alexa, and Microsoft To-Do to Todoist
   </p>
 </p>
 
@@ -42,17 +42,18 @@
 
 ## About
 
-Todoist Bridge is a Node.js daemon that performs continuous one-way synchronization from Google Tasks and/or Amazon Alexa to Todoist. It runs as a background service, polling your task sources at configurable intervals and automatically creating, updating, and completing tasks in Todoist.
+Todoist Bridge is a Node.js daemon that synchronizes tasks between multiple platforms and Todoist. It runs as a background service, polling your task sources at configurable intervals and automatically creating, updating, and completing tasks.
 
 ### Supported Sources
 
 You can use **any combination** of the following sources:
 
-| Source | Description |
-|--------|-------------|
-| Google Tasks | Sync task lists from Google Tasks |
-| Alexa Reminders | Sync reminders from Alexa devices |
-| Alexa Shopping List | Sync your Alexa shopping list |
+| Source | Sync Direction | Description |
+|--------|----------------|-------------|
+| Google Tasks | One-way → Todoist | Sync task lists from Google Tasks |
+| Alexa Reminders | One-way → Todoist | Sync reminders from Alexa devices |
+| Alexa Shopping List | One-way → Todoist | Sync your Alexa shopping list |
+| Microsoft To-Do | **Bi-directional** ↔ Todoist | Two-way sync with Microsoft To-Do lists |
 
 Enable only what you need - each source is independently configurable.
 
@@ -73,11 +74,15 @@ Enable only what you need - each source is independently configurable.
 | **Google Tasks Sync** | Full sync of tasks including subtasks, due dates, and descriptions |
 | **Alexa Reminders** | Sync reminders from all Alexa devices to Todoist |
 | **Alexa Shopping List** | Keep your shopping list in sync |
+| **Microsoft To-Do Sync** | Bi-directional sync with Microsoft To-Do (great for shared lists) |
+| **Completion Sync** | Complete tasks on either platform, syncs to the other |
+| **Shared List Support** | Auto-assign items to yourself in shared Microsoft lists |
 | **Custom Tags** | Apply labels to synced tasks for easy filtering |
 | **Flexible Mapping** | Map any source list to any Todoist project or Inbox |
 | **Subtask Support** | Single-level subtask hierarchy preserved |
 | **Completed Tasks** | Optional retroactive import of completed tasks |
 | **Delete After Sync** | Optionally remove tasks from source after syncing |
+| **Conflict Resolution** | Last-write-wins for bi-directional sync conflicts |
 | **SQLite State** | Reliable change detection with local database |
 | **Graceful Shutdown** | Clean handling of SIGTERM/SIGINT signals |
 
@@ -245,21 +250,42 @@ sources:
         todoist_project_id: "YOUR_ALEXA_PROJECT_ID"
 ```
 
+**Microsoft To-Do (bi-directional):**
+
+```yaml
+todoist:
+  api_token: "your-todoist-api-token"
+
+sources:
+  google:
+    enabled: false
+  alexa:
+    enabled: false
+  microsoft:
+    enabled: true
+    client_id: "your-azure-app-client-id"
+    tenant_id: "your-azure-tenant-id"  # or "common"
+    lists:
+      - list_name: "Groceries"
+        todoist_project_id: "inbox"
+        tags: ["grocery"]
+    assign_to_self: true               # For shared lists
+    exclude_others_assignments: true   # Ignore items from other users
+```
+
 ### Full Configuration
 
 ```yaml
-# Polling interval in minutes
-poll_interval_minutes: 5
-
 # Todoist configuration
 todoist:
   api_token: "your-todoist-api-token"
 
 # Sources to sync from
 sources:
-  # Google Tasks
+  # Google Tasks (one-way sync to Todoist)
   google:
     enabled: true
+    poll_interval_minutes: 5
     credentials_path: "./credentials/google-credentials.json"
     token_path: "./credentials/google-token.json"
     lists:
@@ -270,9 +296,10 @@ sources:
         tags:
           - "google-tasks"
 
-  # Alexa Reminders
+  # Alexa Reminders (one-way sync to Todoist)
   alexa:
     enabled: false
+    poll_interval_minutes: 5
     cookie_path: "./credentials/alexa-cookie.json"
     amazon_page: "amazon.com"
     proxy_port: 3001
@@ -284,13 +311,26 @@ sources:
         todoist_project_id: "789012"
         tags:
           - "alexa"
-
     # Shopping list sync
     sync_shopping_list:
       enabled: false
       todoist_project_id: "123456"
       tags:
         - "shopping"
+
+  # Microsoft To-Do (bi-directional sync with Todoist)
+  microsoft:
+    enabled: false
+    client_id: "your-azure-app-client-id"
+    tenant_id: "common"
+    token_path: "./credentials/microsoft-token.json"
+    poll_interval_minutes: 3
+    lists:
+      - list_name: "Groceries"
+        todoist_project_id: "inbox"
+        tags: ["grocery"]
+    assign_to_self: false              # Assign items from Todoist to yourself
+    exclude_others_assignments: true   # Ignore items from other users
 
 # Global sync settings
 sync:
@@ -380,6 +420,49 @@ On first run, you'll be prompted to authorize with Google:
 >   - "3001:3001"
 > ```
 
+#### Microsoft To-Do (if enabled)
+
+**Azure App Registration Setup:**
+
+1. Go to [Azure Portal](https://portal.azure.com/) > **App registrations**
+2. Click **New registration**
+3. Configure the app:
+   - **Name:** `Todoist Bridge` (or any name you prefer)
+   - **Supported account types:** Choose based on your needs:
+     - "Personal Microsoft accounts only" - for personal @outlook.com/@hotmail.com accounts
+     - "Accounts in any organizational directory and personal Microsoft accounts" - for both work/school and personal
+4. Click **Register** (leave Redirect URI blank)
+5. Copy the **Application (client) ID** - you'll need this for config
+6. Copy the **Directory (tenant) ID** - you'll need this for config
+7. Go to **API permissions** > **Add a permission**:
+   - Select **Microsoft Graph**
+   - Choose **Delegated permissions**
+   - Add: `Tasks.ReadWrite`, `User.Read`
+   - Click **Add permissions**
+8. Go to **Authentication**:
+   - Under **Advanced settings**, set **Allow public client flows** to **Yes**
+   - Click **Save**
+
+**Device Code Authentication Flow:**
+
+Microsoft To-Do uses Device Code Flow, which works in any environment (CLI, Docker, headless servers):
+
+1. On first run, the app displays a message like:
+   ```
+   To sign in, use a web browser to open https://microsoft.com/devicelogin
+   and enter the code: ABCD1234
+   ```
+2. Open that URL in **any browser** (can be on your phone or another computer)
+3. Enter the code shown in your terminal
+4. Sign in with the **Microsoft account that has the To-Do lists you want to sync**
+5. Grant the requested permissions (Tasks.ReadWrite, User.Read)
+6. Return to your terminal - authentication completes automatically
+7. Token is saved to `./credentials/microsoft-token.json` for future runs
+
+> **Which account gets linked?** Whatever Microsoft account you sign into during step 4 is the one that gets linked. This is how you choose which To-Do lists to sync - by signing into the correct account.
+
+> **Shared Lists:** If you're syncing a shared Microsoft To-Do list, sign in with your own account. Enable `exclude_others_assignments: true` to ignore items added by other users.
+
 ### Finding IDs
 
 See the [Wiki: Finding IDs](../../wiki/Finding-IDs) for detailed instructions on obtaining:
@@ -387,6 +470,8 @@ See the [Wiki: Finding IDs](../../wiki/Finding-IDs) for detailed instructions on
 - Todoist Project IDs
 
 ### Field Mapping
+
+**Google Tasks / Alexa → Todoist:**
 
 | Source | Todoist | Notes |
 |--------|---------|-------|
@@ -396,32 +481,45 @@ See the [Wiki: Finding IDs](../../wiki/Finding-IDs) for detailed instructions on
 | Due Date | due_date | Date only |
 | Parent | parent_id | Single level subtasks |
 
+**Microsoft To-Do ↔ Todoist (bi-directional):**
+
+| Microsoft To-Do | Todoist | Notes |
+|-----------------|---------|-------|
+| title | content | Syncs both directions |
+| body.content | description | Syncs both directions |
+| status | is_completed | Completion syncs both ways |
+| dueDateTime | due_date | Date and time preserved |
+| importance | priority | high→P1, normal→P4, low→P4 |
+| reminderDateTime | (via due) | Mapped to Todoist due time |
+
 ---
 
 ## Architecture
 
 ```
-┌─────────────────┐     ┌─────────────────┐
-│  Google Tasks   │     │  Alexa Skills   │
-│      API        │     │      API        │
-└────────┬────────┘     └────────┬────────┘
-         │                       │
-         └───────────┬───────────┘
-                     │
-              ┌──────▼──────┐
-              │  Todoist Bridge  │
-              │   Daemon    │
-              └──────┬──────┘
-                     │
-              ┌──────▼──────┐
-              │   SQLite    │
-              │  State DB   │
-              └──────┬──────┘
-                     │
-              ┌──────▼──────┐
-              │  Todoist    │
-              │    API      │
-              └─────────────┘
+┌─────────────────┐     ┌─────────────────┐     ┌─────────────────┐
+│  Google Tasks   │     │  Alexa Skills   │     │ Microsoft To-Do │
+│      API        │     │      API        │     │   Graph API     │
+└────────┬────────┘     └────────┬────────┘     └────────┬────────┘
+         │                       │                       │
+         │ (one-way)             │ (one-way)             │ (bi-directional)
+         │                       │                       ↕
+         └───────────────────────┼───────────────────────┘
+                                 │
+                          ┌──────▼──────┐
+                          │   Todoist   │
+                          │   Bridge    │
+                          └──────┬──────┘
+                                 │
+                          ┌──────▼──────┐
+                          │   SQLite    │
+                          │  State DB   │
+                          └──────┬──────┘
+                                 │
+                          ┌──────▼──────┐
+                          │   Todoist   │
+                          │     API     │
+                          └─────────────┘
 ```
 
 ### Components
@@ -433,7 +531,9 @@ See the [Wiki: Finding IDs](../../wiki/Finding-IDs) for detailed instructions on
 | `src/storage.ts` | SQLite state management |
 | `src/auth/` | Authentication for Google, Todoist, Alexa |
 | `src/clients/` | API client wrappers |
-| `src/sync/` | Sync engines and mappers |
+| `src/sources/google/` | Google Tasks source (one-way) |
+| `src/sources/alexa/` | Alexa source (one-way) |
+| `src/sources/microsoft/` | Microsoft To-Do source (bi-directional) |
 | `src/utils/` | Logger and retry utilities |
 
 ---
@@ -446,6 +546,7 @@ Detailed documentation is available in the [Wiki](../../wiki):
 - [Installation](../../wiki/Installation) - Detailed installation guide
 - [Google Setup](../../wiki/Google-Setup) - Google Cloud and OAuth configuration
 - [Alexa Setup](../../wiki/Alexa-Setup) - Amazon Alexa integration
+- [Microsoft To-Do Setup](../../wiki/Microsoft-Setup) - Azure AD app registration and bi-directional sync
 - [Finding IDs](../../wiki/Finding-IDs) - How to find list and project IDs
 - [Docker Deployment](../../wiki/Docker-Deployment) - Container deployment guide
 - [Troubleshooting](../../wiki/Troubleshooting) - Common issues and solutions
@@ -473,6 +574,7 @@ Todoist Bridge is built on the work of these projects:
 | [googleapis](https://github.com/googleapis/google-api-nodejs-client) | Google APIs Node.js Client | Apache-2.0 |
 | [todoist-api-typescript](https://github.com/Doist/todoist-api-typescript) | Official Todoist TypeScript SDK | MIT |
 | [alexa-remote2](https://github.com/Apollon77/alexa-remote) | Alexa Remote Control | MIT |
+| [@azure/msal-node](https://github.com/AzureAD/microsoft-authentication-library-for-js) | Microsoft Authentication Library | MIT |
 
 ---
 

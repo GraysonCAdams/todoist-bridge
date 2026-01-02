@@ -19,7 +19,9 @@
   ],
   "license": "MIT",
   "dependencies": {
+    "@azure/msal-node": "^2.16.2",
     "@doist/todoist-api-typescript": "^3.0.3",
+    "@microsoft/microsoft-graph-client": "^3.0.7",
     "alexa-remote2": "^8.0.4",
     "better-sqlite3": "^11.5.0",
     "date-fns": "^4.1.0",
