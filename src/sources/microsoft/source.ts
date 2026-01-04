@@ -19,7 +19,6 @@ import {
   mapMicrosoftToTodoistCreate,
   mapMicrosoftToTodoistUpdate,
   mapTodoistToMicrosoftCreate,
-  hasMicrosoftTaskChanged,
   hasCompletionStatusChanged,
   resolveConflict,
   createStoredRecordFromMicrosoft,
@@ -390,6 +389,11 @@ export class MicrosoftTodoSource implements BidirectionalSourceEngine {
         result.updated++;
         this.logger.info({ title: msItem.title }, 'Reopened Todoist task (from Microsoft)');
       }
+      // Update stored record - Microsoft won, so don't update todoist_modified_at
+      this.storage.updateMicrosoftItem(stored.microsoft_id, {
+        status: status.microsoftCompleted ? 'completed' : 'notStarted',
+        microsoft_modified_at: msItem.lastModifiedDateTime,
+      });
     } else {
       // Todoist is newer → Update Microsoft
       if (status.todoistCompleted) {
@@ -401,14 +405,13 @@ export class MicrosoftTodoSource implements BidirectionalSourceEngine {
         result.updatedInSource++;
         this.logger.info({ title: msItem.title }, 'Reopened Microsoft task (from Todoist)');
       }
+      // Update stored record - Todoist won, so update todoist_modified_at
+      this.storage.updateMicrosoftItem(stored.microsoft_id, {
+        status: status.todoistCompleted ? 'completed' : 'notStarted',
+        microsoft_modified_at: new Date().toISOString(),
+        todoist_modified_at: new Date().toISOString(),
+      });
     }
-
-    // Update stored record
-    this.storage.updateMicrosoftItem(stored.microsoft_id, {
-      status: status.microsoftCompleted ? 'completed' : 'notStarted',
-      microsoft_modified_at: msItem.lastModifiedDateTime,
-      todoist_modified_at: new Date().toISOString(),
-    });
   }
 
   private async updateTodoistFromMicrosoft(
@@ -429,12 +432,17 @@ export class MicrosoftTodoSource implements BidirectionalSourceEngine {
       }
 
       // Update stored record
+      // NOTE: We do NOT update todoist_modified_at here because Microsoft won the conflict.
+      // todoist_modified_at should only reflect when Todoist was the source of truth,
+      // not when we pushed Microsoft's changes TO Todoist. This ensures proper conflict
+      // resolution on subsequent syncs - if the user modifies Todoist later, we want
+      // to compare against when we last knew Todoist had its own changes, not when
+      // we last overwrote it with Microsoft data.
       this.storage.updateMicrosoftItem(stored.microsoft_id, {
         title: msItem.title,
         body: msItem.body?.content || null,
         due_date: msItem.dueDateTime?.dateTime?.split('T')[0] || null,
         microsoft_modified_at: msItem.lastModifiedDateTime,
-        todoist_modified_at: new Date().toISOString(),
         content_hash: generateContentHash(
           msItem.title,
           msItem.body?.content,
