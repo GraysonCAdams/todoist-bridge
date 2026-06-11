@@ -28,17 +28,17 @@ export class TodoistClient {
   }
 
   async getProjects(): Promise<Project[]> {
-    return withRetry(
+    const response = await withRetry(
       () => this.api.getProjects(),
       this.logger,
       'getProjects'
     );
+    return (response as unknown as { results: Project[] }).results;
   }
 
   async getInboxProject(): Promise<Project | null> {
     const projects = await this.getProjects();
-    // Inbox project has inboxProject property set to true
-    return projects.find((p) => p.isInboxProject) || null;
+    return projects.find((p) => (p as unknown as { inboxProject: boolean }).inboxProject) || null;
   }
 
   /**
@@ -79,11 +79,12 @@ export class TodoistClient {
   }
 
   async getProjectTasks(projectId: string): Promise<Task[]> {
-    return withRetry(
+    const response = await withRetry(
       () => this.api.getTasks({ projectId }),
       this.logger,
       'getProjectTasks'
     );
+    return (response as unknown as { results: Task[] }).results;
   }
 
   /**

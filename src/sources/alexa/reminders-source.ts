@@ -6,7 +6,7 @@
 
 import type { SourceEngine, SyncResult, SourceContext } from '../../core/types.js';
 import { createEmptySyncResult, tagsEqual, parseStoredTags } from '../../core/types.js';
-import type { AlexaSourceConfig, AlexaMapping } from './types.js';
+import type { AlexaSourceConfig } from './types.js';
 import type { Storage, AlexaReminder } from '../../storage.js';
 import type { TodoistClient } from '../../clients/todoist.js';
 import type { Logger } from '../../utils/logger.js';
@@ -85,10 +85,6 @@ export class AlexaRemindersSource implements SourceEngine {
     try {
       this.logger.info('Starting Alexa reminder sync...');
 
-      // Clean up stale cache entries before sync
-      await this.cleanupStaleCache();
-
-      // Get the first mapping (Alexa uses "all" as source_list_id)
       const mapping = this.config.lists[0];
       const configuredProjectId = mapping.todoist_project_id;
       const configuredTags = mapping.tags || [];
@@ -97,85 +93,127 @@ export class AlexaRemindersSource implements SourceEngine {
         throw new Error('No todoist_project_id configured for Alexa reminders');
       }
 
-      // Resolve special project IDs like "inbox"
       const todoistProjectId = await this.todoistClient.resolveProjectId(configuredProjectId);
 
-      // Get current reminders from Alexa
-      const alexaReminders = await this.alexaClient.getReminders();
-
-      // Filter by status if configured
-      const includeCompleted = mapping.include_completed;
-      const activeReminders = includeCompleted
-        ? alexaReminders
-        : alexaReminders.filter((r) => r.status === 'ON');
+      // Fetch ALL reminders (ON and OFF) so we can detect dismiss → complete, not just delete
+      const allAlexaReminders = await this.alexaClient.getReminders();
 
       // Get stored reminders
       const storedReminders = this.storage.getAllAlexaReminders();
       const storedMap = new Map(storedReminders.map((r) => [r.alexa_id, r]));
 
+      // Todoist→Alexa: delete Alexa reminders whose paired Todoist task was completed/deleted
+      const activeTodoistIds = await this.todoistClient.getTaskIdsForProjects([todoistProjectId]);
+      const handledIds = new Set<string>();
+
+      for (const stored of storedReminders) {
+        if (stored.todoist_id && !activeTodoistIds.has(stored.todoist_id)) {
+          try {
+            await this.alexaClient.deleteReminder(stored.alexa_id);
+          } catch {
+            // reminder may already be gone from Alexa
+          }
+          this.storage.deleteAlexaReminder(stored.alexa_id);
+          handledIds.add(stored.alexa_id);
+          this.logger.debug(`Dismissed Alexa reminder (Todoist task completed): ${stored.title}`);
+        }
+      }
+
       this.logger.debug({
-        alexaReminderCount: activeReminders.length,
+        alexaReminderCount: allAlexaReminders.length,
         storedReminderCount: storedReminders.length,
+        todoistCompletedCount: handledIds.size,
         deleteAfterSync: mapping.delete_after_sync,
       }, 'Syncing Alexa reminders');
 
-      // Track seen IDs for deletion detection
       const seenIds = new Set<string>();
 
-      // Process each reminder
-      for (const reminder of activeReminders) {
+      for (const reminder of allAlexaReminders) {
         seenIds.add(reminder.id);
+
+        // Skip reminders already handled by Todoist→Alexa pass above
+        if (handledIds.has(reminder.id)) continue;
+
         const stored = storedMap.get(reminder.id);
 
         if (!stored) {
-          // New reminder - create in Todoist
-          const createResult = await this.createReminder(reminder, todoistProjectId, configuredTags);
-          if (createResult.success) {
-            result.created++;
-            // Delete from Alexa if configured
-            if (mapping.delete_after_sync) {
-              const deleted = await this.deleteReminderFromAlexa(reminder.id);
-              if (deleted) {
-                result.deletedFromSource++;
+          // New reminder — only create in Todoist if it's still active
+          if (reminder.status === 'ON') {
+            const createResult = await this.createReminder(reminder, todoistProjectId, configuredTags);
+            if (createResult.success) {
+              result.created++;
+              if (mapping.delete_after_sync) {
+                const deleted = await this.deleteReminderFromAlexa(reminder.id);
+                if (deleted) result.deletedFromSource++;
               }
+            } else if (createResult.error) {
+              result.errors.push(createResult.error);
             }
-          } else if (createResult.error) {
-            result.errors.push(createResult.error);
           }
+          // If status is already OFF (already dismissed), skip — don't create in Todoist
         } else {
+          // Existing paired reminder
+          const statusChanged = reminder.status !== stored.status;
           const reminderChanged = hasAlexaReminderChanged(reminder, stored);
           const storedTags = parseStoredTags(stored.applied_tags);
           const tagsChanged = !tagsEqual(storedTags, configuredTags);
 
-          if (reminderChanged || tagsChanged) {
-            // Reminder or tags changed - update in Todoist
+          // Alexa→Todoist status sync
+          if (statusChanged && stored.todoist_id) {
+            if (reminder.status === 'OFF') {
+              // Reminder was dismissed in Alexa → complete Todoist task
+              try {
+                await this.todoistClient.completeTask(stored.todoist_id);
+                result.completed++;
+                this.logger.debug(`Completed Todoist task (Alexa reminder dismissed): ${reminder.reminderLabel}`);
+              } catch (e) {
+                this.logger.warn({ err: e }, `Failed to complete Todoist task: ${reminder.reminderLabel}`);
+              }
+            } else {
+              // Reminder re-enabled in Alexa → reopen Todoist task
+              try {
+                await this.todoistClient.reopenTask(stored.todoist_id);
+                this.logger.debug(`Reopened Todoist task (Alexa reminder re-enabled): ${reminder.reminderLabel}`);
+              } catch (e) {
+                this.logger.warn({ err: e }, `Failed to reopen Todoist task: ${reminder.reminderLabel}`);
+              }
+            }
+          }
+
+          // Content/tag updates (only for active reminders)
+          if ((reminderChanged || tagsChanged) && reminder.status === 'ON') {
             const updateResult = await this.updateReminder(reminder, stored, todoistProjectId, configuredTags, tagsChanged);
             if (updateResult.success) {
-              if (tagsChanged) {
-                result.tagsUpdated++;
-              }
-              if (reminderChanged) {
-                result.updated++;
-              }
+              if (tagsChanged) result.tagsUpdated++;
+              if (reminderChanged && !statusChanged) result.updated++;
             } else if (updateResult.error) {
               result.errors.push(updateResult.error);
             }
           }
 
-          // Delete previously synced reminder from Alexa if delete_after_sync is enabled
+          // Persist status/content changes to storage
+          if (statusChanged || reminderChanged || tagsChanged) {
+            this.storage.updateAlexaReminder(reminder.id, {
+              title: reminder.reminderLabel,
+              reminder_time: reminder.reminderTime,
+              status: reminder.status,
+              device_name: reminder.deviceName,
+              alexa_updated_at: reminder.updatedDate,
+              applied_tags: configuredTags.length > 0 ? JSON.stringify(configuredTags) : null,
+            });
+          }
+
           if (mapping.delete_after_sync && stored.todoist_id) {
             this.logger.info(`Deleting previously synced reminder from Alexa: ${reminder.reminderLabel}`);
             const deleted = await this.deleteReminderFromAlexa(reminder.id);
-            if (deleted) {
-              result.deletedFromSource++;
-            }
+            if (deleted) result.deletedFromSource++;
           }
         }
       }
 
-      // Detect deletions - reminders that were in storage but not in Alexa anymore
+      // Detect reminders truly deleted from Alexa (not dismissed, not handled above)
       for (const stored of storedReminders) {
-        if (!seenIds.has(stored.alexa_id)) {
+        if (!seenIds.has(stored.alexa_id) && !handledIds.has(stored.alexa_id)) {
           const deleteResult = await this.deleteReminder(stored);
           if (deleteResult.success) {
             result.deleted++;
@@ -189,6 +227,7 @@ export class AlexaRemindersSource implements SourceEngine {
         created: result.created,
         updated: result.updated,
         deleted: result.deleted,
+        completed: result.completed,
         deletedFromSource: result.deletedFromSource,
         tagsUpdated: result.tagsUpdated,
         errors: result.errors.length,
@@ -206,34 +245,6 @@ export class AlexaRemindersSource implements SourceEngine {
 
   async healthCheck(): Promise<boolean> {
     return this.alexaClient.healthCheck();
-  }
-
-  /**
-   * Clean up stale cache entries for reminders that no longer exist in Todoist
-   */
-  private async cleanupStaleCache(): Promise<void> {
-    try {
-      const rawProjectIds = this.config.lists
-        .map((m) => m.todoist_project_id)
-        .filter((id): id is string => !!id);
-
-      if (rawProjectIds.length === 0) {
-        return;
-      }
-
-      const projectIds = await Promise.all(
-        rawProjectIds.map((id) => this.todoistClient.resolveProjectId(id))
-      );
-
-      const validTodoistIds = await this.todoistClient.getTaskIdsForProjects(projectIds);
-      const removed = this.storage.cleanupStaleAlexaReminders(validTodoistIds);
-
-      if (removed > 0) {
-        this.logger.info(`Cleaned up ${removed} stale Alexa reminder(s) from cache`);
-      }
-    } catch (error) {
-      this.logger.warn({ err: error }, 'Failed to clean up stale Alexa cache entries');
-    }
   }
 
   private async createReminder(

@@ -316,7 +316,7 @@ export class MicrosoftTodoSource implements BidirectionalSourceEngine {
       const msItem = await this.msClient.createTask(listId, createParams);
 
       // If Todoist task is completed, complete in Microsoft too
-      if (todoistTask.isCompleted) {
+      if (todoistTask.checked) {
         await this.msClient.completeTask(listId, msItem.id);
         result.completedInSource++;
       }
@@ -493,7 +493,7 @@ export class MicrosoftTodoSource implements BidirectionalSourceEngine {
       }
 
       // Update stored record
-      const status = todoistTask.isCompleted ? 'completed' : 'notStarted';
+      const status = todoistTask.checked ? 'completed' : 'notStarted';
       this.storage.updateMicrosoftItem(stored.microsoft_id, {
         title: todoistTask.content,
         body: todoistTask.description || null,

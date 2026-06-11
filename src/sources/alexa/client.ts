@@ -410,4 +410,33 @@ export class AlexaClient {
     }
     return this.deleteListItem(listId, itemId, version);
   }
+
+  /**
+   * Mark a list item as completed (checked off)
+   * @param listId The list ID
+   * @param itemId The item ID
+   * @param value The item's current text value (required by the API)
+   * @param version The item's current version (required for optimistic concurrency)
+   */
+  async completeListItem(listId: string, itemId: string, value: string, version: number): Promise<void> {
+    return withRetry(
+      () => this.doCompleteListItem(listId, itemId, value, version),
+      this.logger,
+      'completeAlexaListItem'
+    );
+  }
+
+  private doCompleteListItem(listId: string, itemId: string, value: string, version: number): Promise<void> {
+    return new Promise((resolve, reject) => {
+      this.alexa.updateListItem(listId, itemId, { version: String(version), value, completed: 'true' }, (err: Error | null | undefined) => {
+        if (err) {
+          this.logger.error({ err, listId, itemId }, 'Failed to complete list item');
+          reject(err);
+          return;
+        }
+        this.logger.debug(`Marked list item as completed: ${itemId} in list ${listId}`);
+        resolve();
+      });
+    });
+  }
 }

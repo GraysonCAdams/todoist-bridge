@@ -97,15 +97,11 @@ export class AlexaShoppingSource implements SourceEngine {
         throw new Error('No todoist_project_id configured for Alexa shopping list');
       }
 
-      // Resolve special project IDs like "inbox"
       const todoistProjectId = await this.todoistClient.resolveProjectId(configuredProjectId);
 
       this.logger.info('Starting Alexa shopping list sync...');
 
-      // Clean up stale cache entries before sync
-      await this.cleanupStaleCache(todoistProjectId);
-
-      // Get shopping list ID (cache it for delete operations)
+      // Get shopping list ID (needed for complete/delete operations)
       this.shoppingListId = await this.alexaClient.getShoppingListId();
       if (!this.shoppingListId) {
         this.logger.warn('Alexa shopping list not found');
@@ -113,79 +109,98 @@ export class AlexaShoppingSource implements SourceEngine {
       }
 
       const configuredTags = shoppingConfig.tags || [];
-      const includeCompleted = shoppingConfig.include_completed;
       const deleteAfterSync = shoppingConfig.delete_after_sync;
 
-      // Get current items from Alexa
-      const alexaItems = await this.alexaClient.getShoppingItems(includeCompleted);
+      // Always fetch ALL items (completed + active) to distinguish checked vs truly deleted
+      const alexaItems = await this.alexaClient.getShoppingItems(true);
+      const alexaItemMap = new Map(alexaItems.map((item) => [item.id, item]));
 
       // Get stored items
       const storedItems = this.storage.getAllAlexaShoppingItems();
       const storedMap = new Map(storedItems.map((item) => [item.alexa_id, item]));
 
+      // Todoist→Alexa: complete Alexa items whose paired Todoist task was completed/deleted
+      const activeTodoistIds = await this.todoistClient.getTaskIdsForProjects([todoistProjectId]);
+      const handledIds = new Set<string>();
+
+      for (const stored of storedItems) {
+        if (stored.todoist_id && !activeTodoistIds.has(stored.todoist_id) && stored.completed === 0) {
+          // Todoist task completed/deleted — complete the Alexa item if it's still active
+          const alexaItem = alexaItemMap.get(stored.alexa_id);
+          if (alexaItem && !alexaItem.completed) {
+            try {
+              await this.alexaClient.completeListItem(this.shoppingListId!, stored.alexa_id, alexaItem.value, alexaItem.version);
+              this.storage.updateAlexaShoppingItem(stored.alexa_id, {
+                completed: 1,
+                alexa_updated_at: new Date().toISOString(),
+              });
+              handledIds.add(stored.alexa_id);
+              this.logger.debug(`Completed Alexa shopping item (Todoist task done): ${alexaItem.value}`);
+            } catch (e) {
+              this.logger.warn({ err: e }, `Failed to complete Alexa item: ${stored.value}`);
+            }
+          }
+        }
+      }
+
       this.logger.debug({
         alexaItemCount: alexaItems.length,
         storedItemCount: storedItems.length,
+        todoistCompletedCount: handledIds.size,
         deleteAfterSync,
       }, 'Syncing Alexa shopping items');
 
-      // Track seen IDs for deletion detection
       const seenIds = new Set<string>();
 
-      // Process each item
       for (const item of alexaItems) {
         seenIds.add(item.id);
+
+        // Skip items already handled by Todoist→Alexa pass
+        if (handledIds.has(item.id)) continue;
+
         const stored = storedMap.get(item.id);
 
         if (!stored) {
-          // New item - create in Todoist
-          const createResult = await this.createItem(item, todoistProjectId, configuredTags);
-          if (createResult.success) {
-            result.created++;
-            // Delete from Alexa if configured
-            if (deleteAfterSync) {
-              const deleted = await this.deleteItemFromAlexa(item.id, item.version);
-              if (deleted) {
-                result.deletedFromSource++;
+          // New item — only create in Todoist if not already completed in Alexa
+          if (!item.completed) {
+            const createResult = await this.createItem(item, todoistProjectId, configuredTags);
+            if (createResult.success) {
+              result.created++;
+              if (deleteAfterSync) {
+                const deleted = await this.deleteItemFromAlexa(item.id, item.version);
+                if (deleted) result.deletedFromSource++;
               }
+            } else if (createResult.error) {
+              result.errors.push(createResult.error);
             }
-          } else if (createResult.error) {
-            result.errors.push(createResult.error);
           }
+          // If already completed in Alexa when first seen, skip (don't create in Todoist)
         } else {
           const itemChanged = hasAlexaShoppingItemChanged(item, stored);
           const storedTags = parseStoredTags(stored.applied_tags);
           const tagsChanged = !tagsEqual(storedTags, configuredTags);
 
           if (itemChanged || tagsChanged) {
-            // Item or tags changed - update in Todoist
             const updateResult = await this.updateItem(item, stored, todoistProjectId, configuredTags, tagsChanged);
             if (updateResult.success) {
-              if (tagsChanged) {
-                result.tagsUpdated++;
-              }
-              if (itemChanged) {
-                result.updated++;
-              }
+              if (tagsChanged) result.tagsUpdated++;
+              if (itemChanged) result.updated++;
             } else if (updateResult.error) {
               result.errors.push(updateResult.error);
             }
           }
 
-          // Delete previously synced item from Alexa if delete_after_sync is enabled
           if (deleteAfterSync && stored.todoist_id) {
             this.logger.info(`Deleting previously synced item from Alexa: ${item.value}`);
             const deleted = await this.deleteItemFromAlexa(item.id, item.version);
-            if (deleted) {
-              result.deletedFromSource++;
-            }
+            if (deleted) result.deletedFromSource++;
           }
         }
       }
 
-      // Detect deletions - items that were in storage but not in Alexa anymore
+      // Detect items truly deleted from Alexa (not just completed)
       for (const stored of storedItems) {
-        if (!seenIds.has(stored.alexa_id)) {
+        if (!seenIds.has(stored.alexa_id) && !handledIds.has(stored.alexa_id)) {
           const deleteResult = await this.deleteItem(stored);
           if (deleteResult.success) {
             result.deleted++;
@@ -199,6 +214,7 @@ export class AlexaShoppingSource implements SourceEngine {
         created: result.created,
         updated: result.updated,
         deleted: result.deleted,
+        completed: result.completed,
         deletedFromSource: result.deletedFromSource,
         tagsUpdated: result.tagsUpdated,
         errors: result.errors.length,
@@ -216,22 +232,6 @@ export class AlexaShoppingSource implements SourceEngine {
 
   async healthCheck(): Promise<boolean> {
     return this.alexaClient.healthCheck();
-  }
-
-  /**
-   * Clean up stale cache entries for items that no longer exist in Todoist
-   */
-  private async cleanupStaleCache(todoistProjectId: string): Promise<void> {
-    try {
-      const validTodoistIds = await this.todoistClient.getTaskIdsForProjects([todoistProjectId]);
-      const removed = this.storage.cleanupStaleAlexaShoppingItems(validTodoistIds);
-
-      if (removed > 0) {
-        this.logger.info(`Cleaned up ${removed} stale Alexa shopping item(s) from cache`);
-      }
-    } catch (error) {
-      this.logger.warn({ err: error }, 'Failed to clean up stale Alexa shopping cache entries');
-    }
   }
 
   private async createItem(

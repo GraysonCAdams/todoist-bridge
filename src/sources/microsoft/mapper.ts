@@ -39,7 +39,7 @@ export interface TodoistTask {
   content: string;
   description: string;
   projectId: string;
-  isCompleted: boolean;
+  checked: boolean;
   due?: {
     date: string;
     datetime?: string;
@@ -208,7 +208,7 @@ export function hasTodoistTaskChanged(
   stored: MicrosoftTodoItemRecord
 ): boolean {
   // Compare content hash
-  const status = todoistTask.isCompleted ? 'completed' : 'notStarted';
+  const status = todoistTask.checked ? 'completed' : 'notStarted';
   const newHash = generateContentHash(
     todoistTask.content,
     todoistTask.description,
@@ -265,7 +265,7 @@ export function hasCompletionStatusChanged(
   todoistTask: TodoistTask
 ): { differs: boolean; microsoftCompleted: boolean; todoistCompleted: boolean } {
   const microsoftCompleted = msTask.status === 'completed';
-  const todoistCompleted = todoistTask.isCompleted;
+  const todoistCompleted = todoistTask.checked;
 
   return {
     differs: microsoftCompleted !== todoistCompleted,
@@ -314,7 +314,7 @@ export function createStoredRecordFromTodoist(
   listId: string,
   tags: string[]
 ): Omit<MicrosoftTodoItemRecord, 'id' | 'synced_at'> {
-  const status = todoistTask.isCompleted ? 'completed' : 'notStarted';
+  const status = todoistTask.checked ? 'completed' : 'notStarted';
   const dueDate = todoistTask.due?.date || null;
 
   return {
