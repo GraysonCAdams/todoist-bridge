@@ -1,15 +1,32 @@
 #!/bin/sh
 set -e
 
-# Fix permissions on mounted volumes if running as root
-# This allows the container to work out-of-the-box without manual chown
-if [ "$(id -u)" = "0" ]; then
-    # Ensure data and credentials directories are writable
-    chown -R appuser:appgroup /app/data /app/credentials 2>/dev/null || true
+# Write config and credentials from env vars (Fly.io / CI deployments)
+# These env vars hold the full file contents as strings
 
-    # Drop privileges and run as appuser
+if [ -n "$CONFIG_YAML" ]; then
+    printf '%s' "$CONFIG_YAML" > /app/config.yaml
+fi
+
+if [ -n "$GOOGLE_CREDENTIALS" ]; then
+    mkdir -p /app/credentials
+    printf '%s' "$GOOGLE_CREDENTIALS" > /app/credentials/google-credentials.json
+fi
+
+if [ -n "$GOOGLE_TOKEN" ]; then
+    mkdir -p /app/credentials
+    printf '%s' "$GOOGLE_TOKEN" > /app/credentials/google-token.json
+fi
+
+if [ -n "$ALEXA_COOKIE" ]; then
+    mkdir -p /app/credentials
+    printf '%s' "$ALEXA_COOKIE" > /app/credentials/alexa-cookie.json
+fi
+
+# Fix permissions on mounted volumes if running as root, then drop to non-root user
+if [ "$(id -u)" = "0" ]; then
+    chown -R appuser:appgroup /app/data /app/credentials 2>/dev/null || true
     exec su-exec appuser node dist/index.js "$@"
 else
-    # Already running as non-root, just start the app
     exec node dist/index.js "$@"
 fi

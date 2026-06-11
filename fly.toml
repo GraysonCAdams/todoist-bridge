@@ -1,0 +1,18 @@
+app = "todoist-bridge-grayson"
+primary_region = "ord"
+
+[build]
+
+[env]
+  NODE_ENV = "production"
+  LOG_LEVEL = "info"
+  DATABASE_PATH = "/app/data/sync.db"
+
+[mounts]
+  source = "todoist_data"
+  destination = "/app/data"
+
+[[vm]]
+  memory = "256mb"
+  cpu_kind = "shared"
+  cpus = 1
