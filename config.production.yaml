@@ -6,7 +6,7 @@ sources:
     token_path: "./credentials/google-token.json"
     lists:
       - source_list_id: "MTY2OTQ4MjQxMTE1MjE0ODAyODg6MDow"
-        todoist_project_id: "inbox"
+        todoist_project_id: "6gqmxpcHhxMvHm6W"
         delete_after_sync: true
       - source_list_id: "NDNqUnZ4alhWaW43U2pKdw"
         todoist_project_id: "6gqV8xFH3xfcF84Q"
@@ -19,7 +19,7 @@ sources:
     amazon_page: "amazon.com"
     lists:
       - source_list_id: "all"
-        todoist_project_id: "inbox"
+        todoist_project_id: "6gqmxpcHhxMvHm6W"
         delete_after_sync: false
     sync_shopping_list:
       enabled: true
