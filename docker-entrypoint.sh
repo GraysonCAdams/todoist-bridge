@@ -4,10 +4,6 @@ set -e
 # Write config and credentials from env vars (Fly.io / CI deployments)
 # These env vars hold the full file contents as strings
 
-if [ -n "$CONFIG_YAML" ]; then
-    printf '%s' "$CONFIG_YAML" > /app/config.yaml
-fi
-
 if [ -n "$GOOGLE_CREDENTIALS" ]; then
     mkdir -p /app/credentials
     printf '%s' "$GOOGLE_CREDENTIALS" > /app/credentials/google-credentials.json

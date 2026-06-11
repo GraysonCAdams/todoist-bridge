@@ -60,8 +60,9 @@ RUN apk del python3 make g++
 # Copy built application from builder
 COPY --from=builder /app/dist ./dist
 
-# Copy configuration example and entrypoint
+# Copy configuration and entrypoint
 COPY config.example.yaml ./
+COPY config.production.yaml ./config.yaml
 COPY docker-entrypoint.sh /usr/local/bin/
 RUN chmod +x /usr/local/bin/docker-entrypoint.sh
 
