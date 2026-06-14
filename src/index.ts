@@ -346,20 +346,35 @@ async function main() {
     managed.timeout = setTimeout(async () => {
       if (isShuttingDown) return;
 
-      const result = await syncSource(managed);
+      try {
+        // Cap each sync at 90% of the poll interval so a hung API call
+        // doesn't permanently stall the loop.
+        const syncTimeoutMs = Math.floor(managed.pollIntervalMs * 0.9);
+        const result = await Promise.race([
+          syncSource(managed),
+          new Promise<SyncResult>((_, reject) =>
+            setTimeout(
+              () => reject(new Error(`Sync timed out for ${managed.engine.sourceName} after ${syncTimeoutMs}ms`)),
+              syncTimeoutMs
+            )
+          ),
+        ]);
 
-      // Update global stats
-      syncCount++;
-      lastSyncAt = new Date().toISOString();
-      if (!result.success) {
+        syncCount++;
+        lastSyncAt = new Date().toISOString();
+        if (!result.success) {
+          errorCount++;
+          lastSyncSuccess = false;
+        } else {
+          lastSyncSuccess = true;
+        }
+      } catch (error) {
+        logger.error({ err: error, source: managed.engine.sourceName }, 'Poll loop error, rescheduling');
         errorCount++;
-        lastSyncSuccess = false;
-      } else {
-        lastSyncSuccess = true;
+      } finally {
+        // Always reschedule — even after a timeout or unexpected throw.
+        scheduleSourceSync(managed);
       }
-
-      // Schedule next sync
-      scheduleSourceSync(managed);
     }, managed.pollIntervalMs);
   };
 
