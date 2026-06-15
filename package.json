@@ -24,19 +24,19 @@
     "@microsoft/microsoft-graph-client": "^3.0.7",
     "alexa-remote2": "^8.0.4",
     "better-sqlite3": "^11.5.0",
-    "date-fns": "^4.1.0",
+    "date-fns": "^4.4.0",
     "dotenv": "^16.4.5",
     "googleapis": "^144.0.0",
     "p-retry": "^6.2.0",
     "pino": "^9.5.0",
     "pino-pretty": "^11.3.0",
-    "yaml": "^2.6.1",
+    "yaml": "^2.9.0",
     "zod": "^3.23.8"
   },
   "devDependencies": {
     "@types/better-sqlite3": "^7.6.11",
     "@types/node": "^22.9.3",
-    "tsx": "^4.19.2",
+    "tsx": "^4.22.4",
     "typescript": "^5.6.3"
   },
   "engines": {
