@@ -13,6 +13,9 @@ const SyncMappingSchema = z.object({
   include_completed: z.boolean().default(false),
   delete_after_sync: z.boolean().default(false),
   tags: z.array(z.string()).default([]), // Custom tags to apply to synced tasks
+  // Google Tasks only. When false the bridge never sets or clears a Todoist
+  // due date, so a date added in Todoist survives later syncs.
+  sync_due_dates: z.boolean().default(true),
 });
 
 // Google Tasks source configuration

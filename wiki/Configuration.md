@@ -197,6 +197,14 @@ Remove tasks from Google after syncing.
 |------|---------|
 | boolean | false |
 
+##### sync_due_dates
+
+Copy Google due dates to Todoist. When false, the bridge never sets or clears a Todoist due date, so a date added in Todoist survives later syncs. Useful when Google Tasks dates every capture and the dates mean nothing.
+
+| Type | Default |
+|------|---------|
+| boolean | true |
+
 ##### tags
 
 Labels to apply to synced tasks.

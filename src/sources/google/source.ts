@@ -243,6 +243,7 @@ export class GoogleTasksSource implements SourceEngine {
 
     const todoistProjectId = storedList.todoist_id;
     const deleteAfterSync = mapping.delete_after_sync;
+    const syncDueDates = mapping.sync_due_dates;
     const includeCompleted = this.shouldIncludeCompleted(mapping);
 
     const googleTasks = await this.googleClient.getTasks(taskList.id, includeCompleted);
@@ -263,7 +264,7 @@ export class GoogleTasksSource implements SourceEngine {
 
     for (const googleTask of parentTasks) {
       seenGoogleIds.add(googleTask.id);
-      const taskStats = await this.syncTask(googleTask, storedList.id, taskList.id, todoistProjectId, storedTaskMap, deleteAfterSync, configuredTags);
+      const taskStats = await this.syncTask(googleTask, storedList.id, taskList.id, todoistProjectId, storedTaskMap, deleteAfterSync, configuredTags, syncDueDates);
       stats.created += taskStats.created;
       stats.updated += taskStats.updated;
       stats.completed += taskStats.completed;
@@ -285,6 +286,7 @@ export class GoogleTasksSource implements SourceEngine {
         storedTaskMap,
         deleteAfterSync,
         configuredTags,
+        syncDueDates,
         parentTodoistId
       );
       stats.created += taskStats.created;
@@ -322,6 +324,7 @@ export class GoogleTasksSource implements SourceEngine {
     storedTaskMap: Map<string, Task>,
     deleteAfterSync: boolean,
     configuredTags: string[],
+    syncDueDates: boolean,
     parentTodoistId?: string
   ): Promise<{ created: number; updated: number; completed: number; deletedFromSource: number; tagsUpdated: number }> {
     const stats = { created: 0, updated: 0, completed: 0, deletedFromSource: 0, tagsUpdated: 0 };
@@ -329,7 +332,7 @@ export class GoogleTasksSource implements SourceEngine {
 
     if (!storedTask) {
       // New task - create in Todoist
-      const createParams = mapGoogleToTodoistCreate(googleTask, todoistProjectId, parentTodoistId);
+      const createParams = mapGoogleToTodoistCreate(googleTask, todoistProjectId, parentTodoistId, syncDueDates);
 
       if (configuredTags.length > 0) {
         createParams.labels = configuredTags;
@@ -380,7 +383,7 @@ export class GoogleTasksSource implements SourceEngine {
       const tagsChanged = !tagsEqual(storedTags, configuredTags);
 
       if (taskChanged || tagsChanged) {
-        const updateParams = taskChanged ? mapGoogleToTodoistUpdate(googleTask, storedTask) : {};
+        const updateParams = taskChanged ? mapGoogleToTodoistUpdate(googleTask, storedTask, syncDueDates) : {};
 
         if (tagsChanged && storedTask.todoist_id) {
           try {

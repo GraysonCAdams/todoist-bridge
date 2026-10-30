@@ -52,6 +52,7 @@ sources:
       #   todoist_project_id: "456789"       # Todoist Project ID (or "inbox")
       #   include_completed: false           # Sync completed tasks
       #   delete_after_sync: false           # Delete from Google after syncing
+      #   sync_due_dates: true               # false: never set or clear Todoist due dates
       #   tags:                              # Custom tags/labels to apply in Todoist
       #     - "google-tasks"
       #     - "work"

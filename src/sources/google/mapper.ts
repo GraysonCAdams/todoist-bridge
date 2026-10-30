@@ -9,7 +9,8 @@ import { parseISO, format } from 'date-fns';
 export function mapGoogleToTodoistCreate(
   googleTask: GoogleTask,
   projectId: string,
-  parentTodoistId?: string
+  parentTodoistId?: string,
+  syncDueDates = true
 ): CreateTaskParams {
   const params: CreateTaskParams = {
     content: googleTask.title,
@@ -24,7 +25,7 @@ export function mapGoogleToTodoistCreate(
     params.parentId = parentTodoistId;
   }
 
-  if (googleTask.due) {
+  if (syncDueDates && googleTask.due) {
     // Google Tasks due date is in RFC 3339 format, but only the date part is meaningful
     params.dueDate = extractDateOnly(googleTask.due);
   }
@@ -37,7 +38,8 @@ export function mapGoogleToTodoistCreate(
  */
 export function mapGoogleToTodoistUpdate(
   googleTask: GoogleTask,
-  existingTask: Task
+  existingTask: Task,
+  syncDueDates = true
 ): UpdateTaskParams | null {
   const updates: UpdateTaskParams = {};
   let hasChanges = false;
@@ -54,7 +56,7 @@ export function mapGoogleToTodoistUpdate(
   }
 
   const newDueDate = googleTask.due ? extractDateOnly(googleTask.due) : null;
-  if (newDueDate !== existingTask.due_date) {
+  if (syncDueDates && newDueDate !== existingTask.due_date) {
     updates.dueDate = newDueDate;
     hasChanges = true;
   }

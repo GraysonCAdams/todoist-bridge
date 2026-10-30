@@ -18,6 +18,8 @@ export const GoogleListMappingSchema = z.object({
   delete_after_sync: z.boolean().default(false),
   /** Tags to apply to synced tasks */
   tags: z.array(z.string()).default([]),
+  /** Copy Google due dates to Todoist; when false, Todoist due dates are never set or cleared */
+  sync_due_dates: z.boolean().default(true),
 });
 
 export type GoogleListMapping = z.infer<typeof GoogleListMappingSchema>;
